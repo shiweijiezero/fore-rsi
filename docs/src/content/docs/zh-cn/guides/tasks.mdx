@@ -3,7 +3,7 @@ title: 任务文件
 description: 用 Markdown 保存任务要求，并在启动 ForeRSI 时提交。
 ---
 
-import taskFile from '../../../../../../tasks/inference_domain/sglang-throughput.md?url';
+import taskFile from '../../../../../../tasks/inference-optimization/sglang-throughput.md?url';
 
 任务文件是描述目标、约束、可用资源与预期交付物的 Markdown 文档。`--task` 会将文件内容作为对话的初始输入提交。
 
@@ -16,7 +16,7 @@ import taskFile from '../../../../../../tasks/inference_domain/sglang-throughput
 ```bash
 fore-rsi --workflow inference \
   --name "SGLang 吞吐优化" \
-  --task tasks/inference_domain/sglang-throughput.md
+  --task tasks/inference-optimization/sglang-throughput.md
 ```
 
 相对路径以执行命令的目录为基准。文件放在其他位置时，可以使用绝对路径；路径中有空格时，用引号包起来。

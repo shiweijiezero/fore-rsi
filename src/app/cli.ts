@@ -12,8 +12,8 @@
  */
 import { Command, Option } from "commander";
 import metadata from "../../package.json" with { type: "json" };
-import coordinator from "../coordinator/extension.ts";
-import { workflowNames } from "../coordinator/task.ts";
+import { createPiExtension } from "../harnesses-backend/pi.ts";
+import { workflowNames } from "../rsi-workflows/agent-team/coordinator/task-requirements.ts";
 
 /** Parse ForeRSI options and pass the remaining arguments to Pi. */
 async function main(): Promise<void> {
@@ -47,19 +47,18 @@ Resumed tasks keep their saved workflow. Provider API-key environment variables
 are also supported.`)
     .action((args: string[], options: { task?: string; workflow?: string }) => {
       const piArgs = options.task === undefined ? args : [`@${options.task}`, ...args];
-      if (options.workflow !== undefined) piArgs.unshift("--workflow", options.workflow);
-      return runPiCli(piArgs);
+      return runPiCli(piArgs, options.workflow);
     });
 
   await program.parseAsync();
 }
 
-/** Start Pi with the forwarded arguments and the Coordinator extension factory. */
-async function runPiCli(args: string[]): Promise<void> {
+/** Start Pi with native arguments and a workflow-bound Coordinator extension. */
+async function runPiCli(args: string[], workflow?: string): Promise<void> {
   const { main: piMain } = await import("@earendil-works/pi-coding-agent");
   await piMain(args, {
     extensionFactories: [
-      coordinator, // src/coordinator/extension.ts: coordinator() registers task tools and session handlers.
+      createPiExtension(workflow), // src/harnesses-backend/pi.ts: bind the workflow and register Coordinator behavior.
     ],
   });
 }

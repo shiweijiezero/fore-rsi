@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
 
-/** Task requirements and workflow selection kept with the Coordinator's Pi conversation. */
+/** Defines the Coordinator's workflow selection and persisted task-requirement schemas. */
 import Type from "typebox";
-import { TaskRevisionSchema } from "../runtime/task.ts";
+import { TaskRevisionSchema } from "../../../runtime/task.ts";
 
 /** Built-in workflow choices accepted by the CLI and Coordinator. */
 export const workflowNames = ["default", "inference"] as const;

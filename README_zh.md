@@ -108,11 +108,11 @@ fore-rsi
 
 新建任务时，可以通过 `--workflow` 选择工作流：省略时使用 `default`，推理优化使用 `inference`。恢复任务时沿用已保存的工作流。
 
-也可以通过 `--task` 提交写好的 Markdown 任务文件。例如，在 ForeRSI 仓库根目录运行 [SGLang 吞吐优化任务](tasks/inference_domain/sglang-throughput.md)：
+也可以通过 `--task` 提交写好的 Markdown 任务文件。例如，在 ForeRSI 仓库根目录运行 [SGLang 吞吐优化任务](tasks/inference-optimization/sglang-throughput.md)：
 
 ```bash
 fore-rsi --workflow inference \
-  --task tasks/inference_domain/sglang-throughput.md
+  --task tasks/inference-optimization/sglang-throughput.md
 ```
 
 使用自己的任务时，将路径替换为实际文件路径。进入对话后，可继续补充要求，并用 `@` 查找和引用代码、配置、数据等文件。仅提供目标时，团队会自主准备初始方案并开始第一轮工作。

@@ -35,7 +35,7 @@
   },
   "scripts": {
     "dev": "node src/app/cli.ts",
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-resources.mjs",
     "check": "tsc --noEmit",
     "prepare": "npm run build",
     "docs:dev": "npm --prefix docs run dev",

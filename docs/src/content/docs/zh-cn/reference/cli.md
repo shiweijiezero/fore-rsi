@@ -22,7 +22,7 @@ fore-rsi [options] [pi-args...]
 ```bash
 fore-rsi --workflow inference \
   --name "SGLang 吞吐优化" \
-  --task tasks/inference_domain/sglang-throughput.md
+  --task tasks/inference-optimization/sglang-throughput.md
 ```
 
 ## Pi 参数

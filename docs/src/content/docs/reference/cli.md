@@ -22,7 +22,7 @@ For example, from the ForeRSI repository root:
 ```bash
 fore-rsi --workflow inference \
   --name "SGLang throughput" \
-  --task tasks/inference_domain/sglang-throughput.md
+  --task tasks/inference-optimization/sglang-throughput.md
 ```
 
 ## Pi options

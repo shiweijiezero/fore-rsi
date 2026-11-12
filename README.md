@@ -106,11 +106,11 @@ Specify the task's objectives, constraints, available resources, and time budget
 
 Use `--workflow` to choose the workflow for a new task. Omit it to use `default`; use `inference` for inference optimization. A resumed task keeps its saved workflow.
 
-Use `--task` to submit a Markdown task file at startup. For example, run the [SGLang throughput task](tasks/inference_domain/sglang-throughput.md) from the ForeRSI repository root:
+Use `--task` to submit a Markdown task file at startup. For example, run the [SGLang throughput task](tasks/inference-optimization/sglang-throughput.md) from the ForeRSI repository root:
 
 ```bash
 fore-rsi --workflow inference \
-  --task tasks/inference_domain/sglang-throughput.md
+  --task tasks/inference-optimization/sglang-throughput.md
 ```
 
 Replace the path with your own task file as needed. Continue refining the requirements in the conversation, and use `@` to find and reference code, configuration, data, or other files. With only an objective, the team prepares an initial plan and begins the first iteration.

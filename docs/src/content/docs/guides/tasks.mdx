@@ -3,7 +3,7 @@ title: Task files
 description: Save requirements in Markdown and submit them when starting ForeRSI.
 ---
 
-import taskFile from '../../../../../tasks/inference_domain/sglang-throughput.md?url';
+import taskFile from '../../../../../tasks/inference-optimization/sglang-throughput.md?url';
 
 A task file is a Markdown document containing the objective, constraints, available resources, and expected deliverables. `--task` submits its contents as the initial conversation input.
 
@@ -16,7 +16,7 @@ General tasks use `default`. For this example, choose `inference` and name the s
 ```bash
 fore-rsi --workflow inference \
   --name "SGLang throughput" \
-  --task tasks/inference_domain/sglang-throughput.md
+  --task tasks/inference-optimization/sglang-throughput.md
 ```
 
 File paths are relative to the directory where you run the command. Use an absolute path when the task file is stored elsewhere, and quote paths containing spaces.
