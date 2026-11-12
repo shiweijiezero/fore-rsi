@@ -3,8 +3,8 @@
 
 /**
  * Package-level imports for workflow authors.
- * Exposes workflow interfaces and shared data schemas. Host-side workflow loading
- * and assembly are available through fore-rsi/workflows.
+ * Exposes workflow interfaces, prompt rendering and shared data schemas. Host-side
+ * workflow loading and assembly are available through fore-rsi/workflows.
  * @module fore-rsi
  */
 export type {
@@ -49,4 +49,5 @@ export {
   type ResourceConstraints,
   ResourceConstraintsSchema,
 } from "./runtime/resources.ts";
+export { createPromptRenderer } from "./runtime/prompt-renderer.ts";
 export { DurableTaskIdSchema, JsonValueSchema } from "./schema.ts";

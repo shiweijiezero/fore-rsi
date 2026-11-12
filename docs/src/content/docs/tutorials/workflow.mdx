@@ -5,6 +5,7 @@ description: Build a typed workflow module and assemble its native Durable task 
 
 import { Code } from '@astrojs/starlight/components';
 import workflowSource from '../../../../../examples/workflows/task-brief.ts?raw';
+import promptSource from '../../../../../examples/workflows/task-brief-prompt.jinja?raw';
 
 This tutorial creates a workflow that composes a task brief from an objective and an intended audience. It demonstrates the complete module contract without requiring a model or external service.
 
@@ -27,6 +28,14 @@ The maintained example is `examples/workflows/task-brief.ts`:
 Use the same checkpoint and result types for the native task and `ForeRsiWorkflow`. In this example, they are `Checkpoint` and `string`.
 
 Keep work that runs during execution inside the task's phases. `build()` prepares definitions and may use its `WorkflowContext` to resolve the task's name and artifact directory.
+
+## Render prompts
+
+`createPromptRenderer()` creates a reusable Nunjucks environment for Jinja-style templates. The example uses the workflow module's directory as its template root and renders this adjacent file with `task.input`:
+
+<Code code={promptSource} lang="jinja" title="examples/workflows/task-brief-prompt.jinja" />
+
+Call `render(templateName, values)` to supply variables. Template names and shared `include` or `extends` references resolve from the configured root. Text is rendered without HTML escaping; missing output values raise an error.
 
 ## Load and assemble
 

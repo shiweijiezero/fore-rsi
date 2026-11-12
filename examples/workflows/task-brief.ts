@@ -3,7 +3,7 @@
 
 /** A small workflow demonstrating a typed requirement and a native Durable task. */
 import { defineExtension, defineTask } from "@earendil-works/pi-durable";
-import type { ForeRsiWorkflow, TaskRevision } from "fore-rsi";
+import { createPromptRenderer, type ForeRsiWorkflow, type TaskRevision } from "fore-rsi";
 import Type from "typebox";
 
 const Requirements = Type.Object({
@@ -12,6 +12,8 @@ const Requirements = Type.Object({
 
 type Input = TaskRevision & Type.Static<typeof Requirements>;
 type Checkpoint = { phase: "compose" };
+
+const prompts = createPromptRenderer(new URL("./", import.meta.url));
 
 const ComposeBrief = defineTask<Input, Checkpoint, string>({
   name: "task-brief.compose",
@@ -22,7 +24,7 @@ const ComposeBrief = defineTask<Input, Checkpoint, string>({
       status: "terminal",
       outcome: {
         status: "completed",
-        result: `# Task brief\n\n${task.input.goal}\n\nAudience: ${task.input.audience}\n`,
+        result: prompts.render("task-brief-prompt.jinja", task.input),
       },
     }), context),
   },

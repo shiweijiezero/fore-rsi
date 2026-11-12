@@ -5,6 +5,7 @@ description: 编写带类型约束的工作流模块，装配其原生 Durable �
 
 import { Code } from '@astrojs/starlight/components';
 import workflowSource from '../../../../../../examples/workflows/task-brief.ts?raw';
+import promptSource from '../../../../../../examples/workflows/task-brief-prompt.jinja?raw';
 
 这个示例根据任务目标和结果受众生成一份简要说明，用来展示完整的工作流模块接口，无需调用模型或外部服务。
 
@@ -27,6 +28,14 @@ npm install
 原生任务与 `ForeRsiWorkflow` 使用相同的检查点和结果类型，示例中分别是 `Checkpoint` 和 `string`。
 
 实际执行的工作写在任务的阶段函数中。`build()` 准备任务定义，也可以通过传入的 `WorkflowContext` 获取任务名称和产物目录。
+
+## 渲染提示词
+
+`createPromptRenderer()` 使用 Nunjucks 创建可复用的 Jinja 风格模板环境。示例以工作流模块所在目录为模板根目录，将 `task.input` 传给同目录下的模板：
+
+<Code code={promptSource} lang="jinja" title="examples/workflows/task-brief-prompt.jinja" />
+
+通过 `render(模板名称, 数据)` 传入变量。模板名称及 `include`、`extends` 引用的共享模板以配置的根目录为基准。渲染保留原始文本，不做 HTML 转义；需要输出的变量缺失时会报错。
 
 ## 加载与装配
 

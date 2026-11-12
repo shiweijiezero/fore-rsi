@@ -3,8 +3,9 @@
 
 /**
  * Registers the Coordinator's Pi tools and session handlers.
- * The Pi-specific extension factory loads the system prompt and calls this module;
- * this module owns the task preparation behavior that the Coordinator exposes.
+ * The team entry in src/rsi-workflows/agent-team/workflow.ts supplies the role
+ * prompt and workflow selection. This module prepares task requirements and
+ * restores their saved state from the active conversation branch.
  */
 import { isDeepStrictEqual } from "node:util";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";

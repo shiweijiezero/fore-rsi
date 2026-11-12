@@ -6,9 +6,9 @@
  * Entry point for the fore-rsi command. main() parses ForeRSI options and passes
  * Pi arguments to runPiCli(), which calls Pi's public main().
  * Pi owns command dispatch, session management and the terminal lifecycle.
- * The selected workflow is bound when the Pi extension factory is created; the
- * extension registers Coordinator task tools and session_start, session_tree
- * and before_agent_start handlers.
+ * The Pi extension delegates role setup to rsi-workflows/agent-team/workflow.ts.
+ * The team entry registers Coordinator task tools and session_start, session_tree
+ * and before_agent_start handlers through coordinator/tools.ts.
  */
 import { Command, Option } from "commander";
 import metadata from "../../package.json" with { type: "json" };
@@ -53,12 +53,12 @@ are also supported.`)
   await program.parseAsync();
 }
 
-/** Start Pi with native arguments and a workflow-bound Coordinator extension. */
+/** Start Pi with native arguments and a workflow-bound team extension. */
 async function runPiCli(args: string[], workflow?: string): Promise<void> {
   const { main: piMain } = await import("@earendil-works/pi-coding-agent");
   await piMain(args, {
     extensionFactories: [
-      createPiExtension(workflow), // src/harnesses-backend/pi.ts: bind the workflow and register Coordinator behavior.
+      createPiExtension(workflow), // src/harnesses-backend/pi.ts: enter the team workflow with Pi's extension API.
     ],
   });
 }
