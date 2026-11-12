@@ -9,7 +9,7 @@ import taskFile from '../../../../../../tasks/inference-optimization/sglang-thro
 
 ## 使用 SGLang 示例
 
-仓库提供了 <a href={taskFile} download="sglang-throughput.md">SGLang 吞吐优化任务</a>，包含两小时预算、质量与延迟要求，以及四个 Explorer、四个 Worker 和两个 Verifier 的团队配置。
+<a href={taskFile} download="sglang-throughput.md">SGLang 吞吐优化任务</a>以沐曦 C500 GPU 上的 BF16 Qwen3.5-35B-A3B 为目标，分别测量请求并发 1 和 16，时间预算为 24 小时，并区分单个服务候选与全部并行实验的资源上限。
 
 通用任务默认使用 `default`。这个示例选择 `inference`，并为会话命名；在 ForeRSI 仓库根目录执行：
 

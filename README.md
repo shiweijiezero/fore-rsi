@@ -100,7 +100,7 @@ fore-rsi
 
 Specify the task's objectives, constraints, available resources, and time budget. Workflows define team roles and execution steps; the task description can specify which roles to use, their concurrency, runtimes, models, and reasoning levels. The team then autonomously advances the work.
 
-> Optimize my SGLang service's throughput for the current workload while preserving answer quality and latency requirements. Use the designated GPU environment, work within a two-hour budget, and deliver a recommended configuration, measurements, and a summary of changes.
+> Optimize BF16 Qwen3.5-35B-A3B on SGLang at request concurrency 1 and 16. Increase output token throughput and reduce time per output token (TPOT), preserving answer quality. Use at most two MetaX C500 GPUs on one host, with a 24-hour budget, and deliver the recommended configuration, measurements, and changes.
 >
 > Set concurrency to 4 Explorers investigating and comparing approaches, 4 Workers executing plans, and 2 Verifiers checking results. Keep the workflow's defaults for the other roles.
 

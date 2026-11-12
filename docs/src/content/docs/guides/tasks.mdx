@@ -9,7 +9,7 @@ A task file is a Markdown document containing the objective, constraints, availa
 
 ## Use the SGLang example
 
-The repository includes a <a href={taskFile} download="sglang-throughput.md">SGLang throughput task</a>. It specifies a two-hour budget, quality and latency requirements, and a team allocation of four Explorers, four Workers, and two Verifiers.
+The <a href={taskFile} download="sglang-throughput.md">SGLang throughput task</a> targets Qwen3.5-35B-A3B in BF16 on MetaX C500 GPUs. It compares request concurrency 1 and 16 within a 24-hour budget, with separate limits for each service candidate and all concurrent experiments.
 
 General tasks use `default`. For this example, choose `inference` and name the session. Run from the ForeRSI repository root:
 
