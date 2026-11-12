@@ -1,0 +1,39 @@
+---
+title: Task files
+description: Save requirements in Markdown and submit them when starting ForeRSI.
+---
+
+import taskFile from '../../../../../tasks/inference_domain/sglang-throughput.md?url';
+
+A task file is a Markdown document containing the objective, constraints, available resources, and expected deliverables. `--task` submits its contents as the initial conversation input.
+
+## Use the SGLang example
+
+The repository includes a <a href={taskFile} download="sglang-throughput.md">SGLang throughput task</a>. It specifies a two-hour budget, quality and latency requirements, and a team allocation of four Explorers, four Workers, and two Verifiers.
+
+General tasks use `default`. For this example, choose `inference` and name the session. Run from the ForeRSI repository root:
+
+```bash
+fore-rsi --workflow inference \
+  --name "SGLang throughput" \
+  --task tasks/inference_domain/sglang-throughput.md
+```
+
+File paths are relative to the directory where you run the command. Use an absolute path when the task file is stored elsewhere, and quote paths containing spaces.
+
+## Write your own requirements
+
+Describe the result you want before listing implementation preferences. A useful task includes:
+
+- The objective and how the result will be evaluated.
+- Conditions that must remain unchanged, such as answer quality or latency requirements.
+- The environment, resources, and time available for the work.
+- The outputs you need, such as code, a configuration, measurements, or a report.
+
+For inference optimization, identify the service, model, representative workload, and measurement command. Separate requirements from ideas to investigate so an untested suggestion is not treated as a fixed constraint.
+
+## Add context
+
+Continue the conversation after startup to clarify requirements or share results. Type `@` in the editor to find and reference files from the project.
+
+Task files describe the work. [Session names](../sessions/) help you find the conversation that received them.

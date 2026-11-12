@@ -1,0 +1,61 @@
+---
+title: Define and load a workflow
+description: Build a typed workflow module and assemble its native Durable task definitions.
+---
+
+import { Code } from '@astrojs/starlight/components';
+import workflowSource from '../../../../../examples/workflows/task-brief.ts?raw';
+
+This tutorial creates a workflow that composes a task brief from an objective and an intended audience. It demonstrates the complete module contract without requiring a model or external service.
+
+Work in a ForeRSI checkout and install its dependencies:
+
+```bash
+npm install
+```
+
+## Define the module
+
+A workflow module default-exports a `ForeRsiWorkflow`. Its `taskSchema` adds requirements to the common task fields; `build()` supplies the native entry task and the extensions that register it.
+
+The maintained example is `examples/workflows/task-brief.ts`:
+
+<Code code={workflowSource} lang="ts" title="examples/workflows/task-brief.ts" />
+
+`audience` is the example's additional requirement. The entry task reads it together with the common `goal` field and commits a completed result. The abort handler records an aborted outcome.
+
+Use the same checkpoint and result types for the native task and `ForeRsiWorkflow`. In this example, they are `Checkpoint` and `string`.
+
+Keep work that runs during execution inside the task's phases. `build()` prepares definitions and may use its `WorkflowContext` to resolve the task's name and artifact directory.
+
+## Load and assemble
+
+From the repository root, run:
+
+```bash
+node --input-type=module <<'JS'
+import { loadWorkflow, assembleWorkflow } from 'fore-rsi/workflows';
+
+const loaded = await loadWorkflow(
+  new URL('./examples/workflows/task-brief.ts', import.meta.url),
+);
+const prepared = await assembleWorkflow(loaded.definition, {
+  taskName: 'brief-example',
+  taskDirectory: new URL('./output/brief-example/', import.meta.url),
+});
+
+console.log(prepared.entry.definition.name);
+JS
+```
+
+The command prints `task-brief.compose`. The module has been loaded, its task schema compiled, and its entry task registered.
+
+`loadWorkflow()` obtains the version from the module's owning `package.json`. `assembleWorkflow()` returns the entry task, the Durable registry, and a task-data validator. A task host uses these to validate requirements and create or reopen its durable execution.
+
+## Extend the workflow
+
+Add domain requirements to `taskSchema`. Register additional native tasks and tools through the returned extensions, and keep the entry task among their registered tasks.
+
+For multi-stage work, save the values needed by the next stage in the task checkpoint. Pi Durable provides the task phases, waits, and persistence mechanisms; the workflow supplies the actions and their recovery behavior.
+
+Continue with [task data](../../reference/task-data/) and the [API reference](../../api/). Pi Durable's [task and extension guide](https://github.com/earendil-works/pi/blob/main/packages/durable/README.md) describes the underlying execution interfaces.

@@ -2,16 +2,17 @@
 // SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
 
 /**
- * Package-level imports for workflow and plugin authors.
- * Exposes the plugin interfaces and shared data schemas. Host-side plugin loading
- * and assembly are available through fore-rsi/plugins.
+ * Package-level imports for workflow authors.
+ * Exposes workflow interfaces and shared data schemas. Host-side workflow loading
+ * and assembly are available through fore-rsi/workflows.
+ * @module fore-rsi
  */
 export type {
-  ForeRsiPlugin,
-  PluginResources,
-  PluginWorkflow,
+  ForeRsiWorkflow,
+  WorkflowDefinition,
   WorkflowContext,
-} from "./plugin.ts";
+  WorkflowResources,
+} from "./workflow-api.ts";
 export {
   type EnvConfig,
   EnvConfigSchema,
@@ -29,8 +30,8 @@ export {
   AgentInstanceSchema,
   type AgentLifecycleState,
   AgentLifecycleStateSchema,
-  type AgentModelAllocation,
-  AgentModelAllocationSchema,
+  type AgentRoleAllocation,
+  AgentRoleAllocationSchema,
   type AgentRole,
   AgentRoleSchema,
   type AgentTeam,

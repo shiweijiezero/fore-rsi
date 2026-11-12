@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
 
 /**
- * Defines the task requirements and runtime view shared by ForeRSI plugins.
+ * Defines the task requirements and runtime view shared by ForeRSI workflows.
  * A requirement revision contains the goal, resources, team settings and environment.
  * The runtime view adds task identity, execution state and member records.
  */
@@ -60,11 +60,11 @@ export const TaskSchema = Type.Object({
   name: Type.Readonly(Type.String({
     description: "Stable task name, unique within the run-data root.",
   })),
-  plugin: Type.Readonly(Type.Object({
+  workflow: Type.Readonly(Type.Object({
     name: Type.Readonly(Type.String()),
     version: Type.Readonly(Type.String()),
   }, {
-    description: "Plugin bound to this task. Installation records own its source and dependency versions.",
+    description: "Workflow bound to this task, identified by its name and package version.",
   })),
   workflowTaskId: Type.Readonly(Type.Union([DurableTaskIdSchema, Type.Null()], {
     description: "Entry workflow task, or null before it is created.",

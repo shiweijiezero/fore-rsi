@@ -16,9 +16,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./plugins": {
-      "types": "./dist/app/plugins.d.ts",
-      "default": "./dist/app/plugins.js"
+    "./workflows": {
+      "types": "./dist/app/workflow-loader.d.ts",
+      "default": "./dist/app/workflow-loader.js"
     }
   },
   "files": [
@@ -26,6 +26,7 @@
     "README_zh.md",
     "CONTRIBUTING.md",
     "CONTRIBUTING_zh.md",
+    "tasks/**/*.md",
     "docs/assets/*.png",
     "docs/assets/*.svg"
   ],
@@ -36,10 +37,14 @@
     "dev": "node src/app/cli.ts",
     "build": "tsc",
     "check": "tsc --noEmit",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "docs:dev": "npm --prefix docs run dev",
+    "docs:build": "npm --prefix docs run build",
+    "docs:preview": "npm --prefix docs run preview"
   },
   "dependencies": {
     "@earendil-works/chord": "1.5.2",
+    "@earendil-works/pi-coding-agent": "1.5.2",
     "@earendil-works/pi-durable": "1.5.2",
     "@modelcontextprotocol/sdk": "1.32.2",
     "commander": "15.1.0",

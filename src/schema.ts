@@ -3,14 +3,14 @@
 
 /**
  * Common TypeBox schemas for JSON values and native Durable task identifiers.
- * Task, member and plugin schemas use these shared definitions to represent
+ * Task, member and workflow schemas use these shared definitions to represent
  * upstream data types consistently.
  */
 import type { JsonValue } from "@earendil-works/chord/json";
 import type { TaskId } from "@earendil-works/pi-durable";
 import Type from "typebox";
 
-/** Recursive JSON values for task requirements and plugin-defined data. */
+/** Recursive JSON values for task requirements and workflow-defined data. */
 export const JsonValueSchema = Type.Unsafe<JsonValue>(Type.Cyclic({
   JsonValue: Type.Union([
     Type.Null(),

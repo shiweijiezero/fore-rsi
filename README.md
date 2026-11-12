@@ -18,7 +18,7 @@
 
 ForeRSI is a recursive self-improvement (RSI) framework built on Agent Teams. With objectives and constraints defined, teams can autonomously explore approaches in parallel, collaborate on execution, verify results, and refine their approaches and working methods through feedback.
 
-ForeRSI uses decentralized collaboration: agents communicate directly and share progress, reducing information bottlenecks and enabling greater parallelism. If one member stalls or fails, others can continue with independent work. The terminal and web interfaces let you provide materials, refine requirements, and manage tasks.
+ForeRSI uses decentralized collaboration: agents communicate directly and share progress, reducing information bottlenecks and enabling greater parallelism. If one member stalls or fails, others can continue with independent work. The terminal interface lets you provide materials, refine requirements, and manage tasks. The [documentation](docs/README.md) includes usage guides, a workflow tutorial, and API reference.
 
 ## Quick start
 
@@ -61,58 +61,75 @@ npm uninstall -g fore-rsi
 
 </details>
 
-### 2. Deploy and start
+### 2. Start and sign in
 
-Select the team's default agent runtime with `--harness` (`pi`, `codex`, or `claude-code`) and its authentication method with `--auth` (`subscription` or `api-key`). Choose one of these startup options; replace `your-api-key` with your OpenAI API key in the API-key example.
-
-```bash
-# Pi with subscription sign-in, terminal interface
-fore-rsi --harness pi --auth subscription
-
-# Pi with an OpenAI API key, terminal interface
-export OPENAI_API_KEY="your-api-key"
-fore-rsi --harness pi --auth api-key
-
-# Pi with subscription sign-in, web interface
-fore-rsi --harness pi --auth subscription --ui web
-```
-
-Subscription mode follows the selected runtime's sign-in flow. API-key mode reads the model provider's environment variable; for example, Anthropic uses `ANTHROPIC_API_KEY`. Use `--harness codex` or `--harness claude-code` to select another runtime. `--ui web` selects the browser interface for either authentication method.
-
-After startup, choose models, reasoning levels, and an execution environment in the terminal or web interface. Individual roles can override the team's default runtime, authentication method, model, and reasoning level.
-
-### 3. Define objectives and start RSI
-
-Specify the task's objectives, constraints, available resources, and time budget. Plugins provide the roles and workflow; the task description can specify which roles to use, their concurrency, runtimes, models, and reasoning levels. The team then autonomously advances the work.
+Start in the project directory you want to work with:
 
 ```bash
 fore-rsi
-# Choose the terminal or web interface, runtime, and authentication method,
-# then enter the task in the conversation.
 ```
+
+Inside the terminal interface, use Pi's built-in commands:
+
+```text
+/login
+/model
+```
+
+Use `/login` to choose a model provider and follow its subscription sign-in or API-key setup. Existing credentials in environment variables such as `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` also work.
+
+`/model` selects the model for the Coordinator, the agent you speak with; `/thinking` adjusts its reasoning level.
+
+Tools use the permissions of the operating-system user running ForeRSI, without per-call approval.
+
+<details>
+<summary>Use a network proxy</summary>
+
+If your connection needs a proxy, set these variables before starting. Replace `http://127.0.0.1:7890` with your HTTP proxy's address:
+
+```bash
+export HTTP_PROXY=http://127.0.0.1:7890
+export HTTPS_PROXY=http://127.0.0.1:7890
+export NO_PROXY=localhost,127.0.0.1,::1
+fore-rsi
+```
+
+</details>
+
+### 3. Define objectives and start RSI
+
+Specify the task's objectives, constraints, available resources, and time budget. Workflows define team roles and execution steps; the task description can specify which roles to use, their concurrency, runtimes, models, and reasoning levels. The team then autonomously advances the work.
 
 > Optimize my SGLang service's throughput for the current workload while preserving answer quality and latency requirements. Use the designated GPU environment, work within a two-hour budget, and deliver a recommended configuration, measurements, and a summary of changes.
 >
-> Set concurrency to 4 Explorers investigating and comparing approaches, 4 Workers executing plans, and 2 Verifiers checking results. Keep the plugin's defaults for other roles and use the runtimes, models, and reasoning levels selected at startup.
+> Set concurrency to 4 Explorers investigating and comparing approaches, 4 Workers executing plans, and 2 Verifiers checking results. Keep the workflow's defaults for the other roles.
 
-Attach code, configuration, papers, data, or previous results. You can also submit just an objective and let the team prepare an initial plan and begin the first iteration.
+Use `--workflow` to choose the workflow for a new task. Omit it to use `default`; use `inference` for inference optimization. A resumed task keeps its saved workflow.
 
-<details>
-<summary>Start from a Markdown task</summary>
-
-Run the SGLang throughput example from the local repository root:
+Use `--task` to submit a Markdown task file at startup. For example, run the [SGLang throughput task](tasks/inference_domain/sglang-throughput.md) from the ForeRSI repository root:
 
 ```bash
-# Terminal
-fore-rsi run ./tasks/inference_domain/sglang-throughput.md --harness pi --auth subscription
-
-# Web
-fore-rsi run ./tasks/inference_domain/sglang-throughput.md --harness pi --auth subscription --ui web
+fore-rsi --workflow inference \
+  --task tasks/inference_domain/sglang-throughput.md
 ```
 
-The terminal and web interfaces also let you choose a built-in example or your own task file.
+Replace the path with your own task file as needed. Continue refining the requirements in the conversation, and use `@` to find and reference code, configuration, data, or other files. With only an objective, the team prepares an initial plan and begins the first iteration.
 
-</details>
+### 4. Name and resume sessions
+
+Give a session a name when starting it:
+
+```bash
+fore-rsi --name "Inference throughput optimization"
+```
+
+Use `/name` in the conversation to rename it and `/session` to find its ID. Choose a resume command below; replace `ID` with the session ID:
+
+```bash
+fore-rsi --resume       # Open the session picker and search by name
+fore-rsi --continue     # Continue the latest session for the current directory
+fore-rsi --session ID   # Resume a session by ID
+```
 
 ## The improvement loop
 
@@ -140,9 +157,9 @@ Humans and agents use task experience and Watchdog feedback to improve the Harne
 
 ## Design your custom RSI workflow
 
-Define team roles, tools, workflow steps, and handoff rules through plugins. Install existing plugins or develop your own, then combine and reuse them across tasks.
+A workflow defines team roles, tools, execution steps, and handoff rules. Reuse an existing workflow or develop one for the task.
 
-Plugins can include domain prompts, reference materials, knowledge, methods, and evaluation criteria. Specify each role's concurrency, runtime, model, and reasoning level in the task description.
+Workflows can include domain prompts, reference materials, knowledge, methods, and evaluation criteria.
 
 - Software development: implement features or algorithms and refine them through testing and feedback.
 - Inference optimization: improve code, configuration, and runtime performance in systems such as Foretoken, SGLang, and vLLM.

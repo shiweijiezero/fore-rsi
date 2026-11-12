@@ -20,7 +20,7 @@ ForeRSI 是一个基于 Agent Team 的递归自我改进（Recursive Self-Improv
 
 ForeRSI 采用去中心化协作理念：Agent 成员直接交流与共享进展，减少信息转发瓶颈，提升并行度；单个成员出现异常时，其他独立工作仍可继续推进。
 
-用户可以通过终端或 Web 界面提供材料、调整要求和管理任务。
+用户可以通过终端对话提供材料、调整要求和管理任务。完整使用指南、工作流教程与接口参考见[文档](docs/README.md)。
 
 ## 快速开始
 
@@ -63,58 +63,75 @@ npm uninstall -g fore-rsi
 
 </details>
 
-### 2. 部署与启动
+### 2. 启动与登录
 
-通过 `--harness` 选择团队默认使用的 Agent 运行后端（`pi`、`codex` 或 `claude-code`），通过 `--auth` 选择认证方式（`subscription` 或 `api-key`）。按需要选择一种启动方式；API Key 示例中的 `your-api-key` 替换为自己的 OpenAI API Key。
-
-```bash
-# Pi 后端，订阅登录，终端界面
-fore-rsi --harness pi --auth subscription
-
-# Pi 后端，OpenAI API Key，终端界面
-export OPENAI_API_KEY="your-api-key"
-fore-rsi --harness pi --auth api-key
-
-# Pi 后端，订阅登录，Web 界面
-fore-rsi --harness pi --auth subscription --ui web
-```
-
-订阅模式通过所选后端的登录流程认证；API Key 模式读取模型服务的环境变量，例如 Anthropic 使用 `ANTHROPIC_API_KEY`。切换后端时使用 `--harness codex` 或 `--harness claude-code`。两种认证方式都可以添加 `--ui web` 使用浏览器界面。
-
-启动后，在终端或 Web 界面选择模型、推理强度与执行环境。各角色可以在团队默认设置的基础上，分别配置后端、认证方式、模型和推理强度。
-
-### 3. 设定目标并进行 RSI 工作
-
-在对话中设定任务目标、约束、可用资源与时间预算。插件提供团队角色和执行流程，本次任务的角色组成、并行数量、后端、模型与推理强度可以在任务要求中指定。提交后由团队自主推进。
+在希望处理的项目目录中启动：
 
 ```bash
 fore-rsi
-# 随后在命令行中选择，终端/web，harness后端，以及订阅/API，在对话中输入任务：
 ```
+
+进入终端界面后，使用 Pi 原生命令完成登录和模型选择：
+
+```text
+/login
+/model
+```
+
+`/login` 用于选择模型服务商，按提示使用订阅登录或配置 API Key；也可以沿用环境变量中的 `OPENAI_API_KEY`、`ANTHROPIC_API_KEY` 等凭据。
+
+`/model` 选择与你对话的 Coordinator（协调者）的模型，`/thinking` 调整其推理强度。
+
+工具以运行 ForeRSI 的系统用户权限执行，默认无需逐次审批。
+
+<details>
+<summary>使用网络代理</summary>
+
+需要代理时，在启动前设置以下变量。将示例中的 `http://127.0.0.1:7890` 替换为实际 HTTP 代理地址：
+
+```bash
+export HTTP_PROXY=http://127.0.0.1:7890
+export HTTPS_PROXY=http://127.0.0.1:7890
+export NO_PROXY=localhost,127.0.0.1,::1
+fore-rsi
+```
+
+</details>
+
+### 3. 设定目标并进行 RSI 工作
+
+在对话中设定任务目标、约束、可用资源与时间预算。工作流定义团队角色和执行步骤；可以在任务要求中指定角色组成、并行数量、Agent 后端、模型与推理强度。团队会据此自主推进。
 
 > 优化 SGLang 服务在当前工作负载下的吞吐量，保持回答质量和延迟要求。使用指定的 GPU 环境，预算两小时，交付推荐配置、测量结果与改动说明。
 >
-> 团队并行度设置为：4 个 Explorer 探索和比较方案，4 个 Worker 执行方案，2 个 Verifier 负责验证。其他角色沿用插件预设，后端、模型与推理强度沿用启动时的设置。
+> 团队并行度设置为：4 个 Explorer 探索和比较方案，4 个 Worker 执行方案，2 个 Verifier 负责验证。其余角色沿用工作流预设。
 
-支持附加代码、配置、论文、数据或历史结果，也支持仅提交目标，由团队自主准备初始方案并开始第一轮工作。
+新建任务时，可以通过 `--workflow` 选择工作流：省略时使用 `default`，推理优化使用 `inference`。恢复任务时沿用已保存的工作流。
 
-<details>
-<summary>从 Markdown 任务启动</summary>
-
-在本地仓库根目录运行 SGLang 吞吐量任务示例：
+也可以通过 `--task` 提交写好的 Markdown 任务文件。例如，在 ForeRSI 仓库根目录运行 [SGLang 吞吐优化任务](tasks/inference_domain/sglang-throughput.md)：
 
 ```bash
-
-# 终端
-fore-rsi run ./tasks/inference_domain/sglang-throughput.md --harness pi --auth subscription
-
-# Web
-fore-rsi run ./tasks/inference_domain/sglang-throughput.md --harness pi --auth subscription --ui web
+fore-rsi --workflow inference \
+  --task tasks/inference_domain/sglang-throughput.md
 ```
 
-也可以在终端或 Web 界面中选择内置示例或自己的任务文件。
+使用自己的任务时，将路径替换为实际文件路径。进入对话后，可继续补充要求，并用 `@` 查找和引用代码、配置、数据等文件。仅提供目标时，团队会自主准备初始方案并开始第一轮工作。
 
-</details>
+### 4. 命名与恢复会话
+
+启动时可以为会话命名：
+
+```bash
+fore-rsi --name "推理吞吐优化"
+```
+
+在对话中用 `/name` 修改名称，用 `/session` 查看会话 ID。下列恢复命令按需选择，`ID` 替换为实际会话 ID：
+
+```bash
+fore-rsi --resume       # 打开会话选择器，可以搜索名称
+fore-rsi --continue     # 继续当前目录最近的会话
+fore-rsi --session ID   # 按会话 ID 恢复
+```
 
 ## 持续改进循环
 
@@ -142,9 +159,9 @@ Watchdog（看门狗）定期巡查任务进展和团队协作，识别停滞、
 
 ## 设计你的定制 RSI 工作流
 
-通过插件定义团队角色、工具、工作步骤和交接规则。可以安装已有插件，也可以编写自己的插件，并按任务组合和复用。
+工作流定义团队角色、工具、执行步骤和交接规则。可以复用已有工作流，也可以按任务需要编写自己的工作流。
 
-插件可以携带领域的提示词、参考资料、专业知识、工作方法和评价标准。各角色的并行数量、后端、模型与推理强度则可以在任务说明中指定。
+工作流可以携带领域提示词、参考资料、专业知识、工作方法和评价标准。
 
 - 软件开发：迭代实现功能或算法，通过测试与反馈改进。
 - 推理优化：优化 Foretoken、SGLang、vLLM 等推理系统的代码、配置与运行表现。

@@ -34,6 +34,8 @@ npm run build
 
 Exercise the behavior affected by the change. Inspect rendered pages for interface or documentation changes; run the relevant task path for workflow, execution, or recovery changes. Record the inputs, environment, commands, and observed results needed to understand the outcome.
 
+For documentation changes, follow the [documentation guide](docs/README.md) to preview the website and regenerate its API reference.
+
 Tests should protect important behavior or a concrete regression. Prefer integration and end-to-end coverage of shared behavior. New dependencies, tests, or CI should have a clear purpose and an understood maintenance cost.
 
 ## Pull requests

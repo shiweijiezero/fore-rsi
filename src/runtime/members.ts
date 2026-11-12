@@ -81,11 +81,11 @@ export const AgentTeamSchema = Type.Object({
   agents: Type.Record(Type.String(), AgentInstanceSchema),
 });
 
-export const AgentModelAllocationSchema = Type.RecordValue(AgentTeamSpecSchema.properties.roles).items;
+export const AgentRoleAllocationSchema = Type.RecordValue(AgentTeamSpecSchema.properties.roles).items;
 
 export type AgentTeamSpec = Type.Static<typeof AgentTeamSpecSchema>;
 export type AgentTeam = Type.Static<typeof AgentTeamSchema>;
 export type AgentInstance = Type.Static<typeof AgentInstanceSchema>;
 export type AgentRole = Type.Static<typeof AgentRoleSchema>;
 export type AgentLifecycleState = Type.Static<typeof AgentLifecycleStateSchema>;
-export type AgentModelAllocation = Type.Static<typeof AgentModelAllocationSchema>;
+export type AgentRoleAllocation = Type.Static<typeof AgentRoleAllocationSchema>;

@@ -79,14 +79,12 @@ export const ResourceSchema = Type.Object({
   ], {
     description: "Per-machine concurrent limits. Null uses the host's authorized scope; an empty map allows no machines.",
   }),
-  perExecutionConstraints: {
-    ...ResourceConstraintsSchema,
+  perExecutionConstraints: Type.With(ResourceConstraintsSchema, {
     description: "Limits for one complete workload, including its cross-machine jobs and supporting services, rather than each shell command.",
-  },
-  totalExecutionConstraints: {
-    ...ResourceConstraintsSchema,
+  }),
+  totalExecutionConstraints: Type.With(ResourceConstraintsSchema, {
     description: "Concurrent totals across all managed executions, including preparation and jobs or services whose resources remain allocated.",
-  },
+  }),
   resourceComments: Type.Array(Type.String()),
 });
 
