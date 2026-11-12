@@ -1,0 +1,38 @@
+{
+  "name": "fore-rsi",
+  "version": "0.0.1",
+  "description": "An RSI framework built on Agent Teams that autonomously explore approaches in parallel, execute work, and verify results, with feedback driving continuous improvement.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shiweijiezero/fore-rsi.git"
+  },
+  "bin": {
+    "fore-rsi": "dist/app/cli.js"
+  },
+  "files": [
+    "dist",
+    "README_zh.md",
+    "CONTRIBUTING.md",
+    "CONTRIBUTING_zh.md",
+    "docs/assets/*.png",
+    "docs/assets/*.svg"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "dev": "node src/app/cli.ts",
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "commander": "15.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "7.0.2"
+  }
+}
