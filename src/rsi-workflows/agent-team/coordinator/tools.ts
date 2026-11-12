@@ -28,8 +28,7 @@ export default function registerCoordinatorTools(
 ): void {
   pi.on("session_start", (_event, ctx) => {
     const task = readTask(ctx);
-    const requested = requestedWorkflow;
-    if (task && requested !== undefined && requested !== task.workflow) {
+    if (task && requestedWorkflow !== undefined && requestedWorkflow !== task.workflow) {
       ctx.ui.notify(`Resuming the ${task.workflow} workflow. Use /new to select another workflow.`, "info");
     }
     showStatus(ctx, task?.workflow ?? selectedWorkflow(requestedWorkflow));

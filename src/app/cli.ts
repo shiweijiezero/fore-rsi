@@ -6,8 +6,8 @@
  * Entry point for the fore-rsi command. main() parses ForeRSI options and passes
  * Pi arguments to runPiCli(), which calls Pi's public main().
  * Pi owns command dispatch, session management and the terminal lifecycle.
- * It initializes the Coordinator through extensionFactories; the extension
- * registers --workflow, task read/update tools, and session_start, session_tree
+ * The selected workflow is bound when the Pi extension factory is created; the
+ * extension registers Coordinator task tools and session_start, session_tree
  * and before_agent_start handlers.
  */
 import { Command, Option } from "commander";

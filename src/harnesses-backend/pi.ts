@@ -7,11 +7,11 @@
  * adapter loads the Coordinator prompt and registers its task tools and handlers.
  */
 import { readFile } from "node:fs/promises";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import registerCoordinatorTools from "../rsi-workflows/agent-team/coordinator/tools.ts";
 
 /** Bind a selected workflow to the Pi extension factory used by the CLI. */
-export function createPiExtension(requestedWorkflow?: string): (pi: ExtensionAPI) => Promise<void> {
+export function createPiExtension(requestedWorkflow?: string): ExtensionFactory {
   return async (pi: ExtensionAPI): Promise<void> => {
     const systemPrompt = await readFile(
       new URL("../rsi-workflows/agent-team/coordinator/system-prompt.jinja", import.meta.url),
