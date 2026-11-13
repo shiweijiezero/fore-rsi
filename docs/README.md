@@ -1,30 +1,19 @@
-# ForeRSI documentation
+# Documentation / 文档
 
-Read the [English guide](src/content/docs/index.md) or the [Chinese guide](src/content/docs/zh-cn/index.md). The website combines usage guides, runnable workflow examples, CLI reference, and generated TypeScript API reference.
+ForeRSI currently provides a Python CLI that launches Pi. Installation, usage, and development instructions are maintained in:
 
-## Preview locally
+ForeRSI 当前提供启动 Pi 的 Python CLI，安装、使用和开发说明集中在：
 
-Use Node.js 22.23.4 or later. From the repository root:
+- [English README](../README.md) · [中文 README](../README_zh.md)
+- [Contributing](../CONTRIBUTING.md) · [贡献指南](../CONTRIBUTING_zh.md)
 
-```bash
-npm install
-npm --prefix docs ci
-npm run docs:dev
-```
+Pi owns the terminal interface, model access, tools, and conversation history. Its upstream documentation describes these features:
 
-Open the local URL printed by Astro, under `/fore-rsi/`. The English guide is at `/fore-rsi/`; Chinese is at `/fore-rsi/zh-cn/`.
+终端界面、模型接入、工具和对话历史由 Pi 管理，相关用法见上游文档：
 
-## Edit content
+- [Pi coding agent](https://github.com/earendil-works/pi/tree/main/packages/coding-agent)
+- [Pi sessions / 会话](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sessions.md)
 
-English pages live in `src/content/docs/`, with matching Chinese pages under `src/content/docs/zh-cn/`. Use the same page path in both languages. Tutorials import maintained example files so their code stays in sync.
+Upstream documentation tracks Pi's current development; use `fore-rsi -- --help` to check the options available in your installed version.
 
-API pages are generated from the public package entry points by TypeDoc, using the package's compiler configuration. Update source comments and exports rather than editing generated pages.
-
-## Build the website
-
-```bash
-npm run docs:build
-npm run docs:preview
-```
-
-The static site is written to `docs/dist/`. `astro.config.mjs` defines its site URL and `/fore-rsi/` base path. Deploy that directory to a static host using the matching path.
+上游文档随 Pi 开发更新；本机安装版本支持的选项以 `fore-rsi -- --help` 为准。

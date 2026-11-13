@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fore-rsi"
+version = "0.0.1"
+description = "A minimal Python entry point for Pi."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+dependencies = []
+
+[project.scripts]
+fore-rsi = "fore_rsi.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
