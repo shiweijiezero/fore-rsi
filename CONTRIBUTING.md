@@ -4,31 +4,31 @@ English | [简体中文](CONTRIBUTING_zh.md)
 
 ## Local development
 
-Follow the [README](README.md#install) to install Pi and create the Python environment. The editable install makes changes under `src/` available to the `fore-rsi` command.
+Follow the [README](README.md#install) to create the Python environment and install. An editable installation makes changes under `src/` available to the `fore-rsi` command.
 
-The current implementation is a small Python CLI that launches Pi. Keep code easy to read and give each function a clear responsibility. Use Python type annotations and the standard library where practical. Keep Pi-specific behavior separate from future task-management logic.
+Declare ForeRSI options through Typer. Each configuration dataclass in `config.py` holds its parameters and defines a `handle()` method; `config_validator.py` checks their types. Give each function a clear responsibility and keep code readable. The workflow owns agent execution; Herdr provides the display. Business handlers are currently skeletons.
 
-Keep English and Chinese documentation aligned. Update commands, examples, and their consumers together. Keep credentials, private infrastructure details, personal paths, and local execution data outside the repository.
+Keep English and Chinese documentation aligned. Update commands, examples, and configuration fields together. Keep credentials, private infrastructure details, and local runtime data outside the repository.
 
 ## Verify changes
 
-With the Python environment active and Pi installed, run:
+These commands do not call a model or create agents:
 
 ```bash
 fore-rsi --help
 fore-rsi --version
-fore-rsi -- --version
-fore-rsi -- --help
+fore-rsi --task task.md --workflow workflow_name --harness harness_name
+fore-rsi --session session_name --detach
 ```
 
-These checks exercise the ForeRSI entry point and forwarding to Pi without calling a model. For argument-handling changes, also verify file paths containing spaces and the `--` separator. For process-handling changes, verify terminal interaction, cancellation, and exit status.
+For CLI changes, check how options map to their dataclasses and handlers, values containing spaces, and rejection of subcommands, positional messages, and unknown options. The supported options are `--version`, `--help`, `--task`, `--workflow`, `--harness`, `--session`, and `--detach`. For dataclass changes, check invalid types supplied by Python callers.
 
-Record the commands and actual results relevant to the change. Add tests for important behavior or concrete regressions; keep new dependencies and test infrastructure proportionate to the code.
+The first two commands should succeed. The business examples currently exit nonzero with a not-implemented message. Use stand-in handlers to check dispatch without running a workflow. Record commands and actual results; keep tests and dependencies proportionate to the code.
 
 ## Pull requests
 
-Keep each change focused and explain the problem, resulting behavior, and validation. Discuss changes to public interfaces or module responsibilities with the maintainers before a larger implementation.
+Keep changes focused and explain the problem, resulting behavior, and validation. Discuss major interface or responsibility changes with the maintainers first.
 
-Use a short English title beginning with a change tag such as `[Bugfix]`, `[Feature]`, `[Refactor]`, or `[Docs]`. Write commit messages in English.
+Use a short English PR title beginning with a tag such as `[Bugfix]`, `[Feature]`, `[Refactor]`, or `[Docs]`. Write commit messages in English.
 
-Contributions are distributed under the [Apache License 2.0](LICENSE). Verify the provenance and licensing of any material you include.
+Contributions are distributed under the [Apache License 2.0](LICENSE).

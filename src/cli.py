@@ -1,43 +1,72 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
 
-"""Parse ForeRSI options and lunch workflow loop"""
+"""Parse ForeRSI options. Workflow execution is not connected yet.
 
-import argparse
-import os
-import sys
+Examples:
+
+    fore-rsi --task task.md --workflow workflow_name --harness harness_name
+
+    fore-rsi --session session_name --detach
+"""
+
+from pathlib import Path
+from typing import Annotated
+
+import typer
+
+from config import Config, DetachConfig, HarnessConfig, SessionConfig, TaskConfig, WorkflowConfig
+from config_validator import validate_config
+
+app = typer.Typer(add_completion=False, pretty_exceptions_enable=False)
+
+
+def parse_args(
+    task: Path | None = None,
+    workflow: str | None = None,
+    harness: str | None = None,
+    session: str | None = None,
+    detach: bool = False,
+) -> list[Config]:
+    """Convert supplied options into their corresponding configurations."""
+    configs: list[Config] = []
+    if task is not None:
+        configs.append(TaskConfig(path=task))
+    if workflow is not None:
+        configs.append(WorkflowConfig(name=workflow))
+    if harness is not None:
+        configs.append(HarnessConfig(name=harness))
+    if session is not None:
+        configs.append(SessionConfig(session_id=session))
+    if detach is not False:
+        configs.append(DetachConfig(enabled=detach))
+    for config in configs:
+        validate_config(config)
+    return configs
+
+
+@app.command(help=__doc__)
+def cli(
+    task: Annotated[Path | None, typer.Option("--task", help="Markdown task file")] = None,
+    workflow: Annotated[str | None, typer.Option("--workflow", help="Workflow selection")] = None,
+    harness: Annotated[str | None, typer.Option("--harness", help="Harness selection")] = None,
+    session: Annotated[str | None, typer.Option("--session", help="Session identifier")] = None,
+    detach: Annotated[bool, typer.Option("--detach", help="Request detached operation")] = False,
+    version: Annotated[bool, typer.Option("--version", help="Show version and exit")] = False,
+) -> None:
+    """Parse options and dispatch each configuration to its handler."""
+    if version:
+        typer.echo("fore-rsi 0.0.1")
+        raise typer.Exit()
+    for config in parse_args(task, workflow, harness, session, detach):
+        config.handle()
 
 
 def main() -> None:
-    """Forward prompts, task files and native Pi options without changing the cwd."""
-    parser = argparse.ArgumentParser(
-        prog="fore-rsi",
-        description="Open Pi with a prompt or a Markdown task file.",
-        allow_abbrev=False,
-        epilog="Other arguments go to Pi. Use 'fore-rsi -- --help' for Pi help.",
-    )
-    parser.add_argument("--task", metavar="FILE", help="Submit a Markdown task file to Pi")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.0.1")
-
-    # Everything after -- belongs to Pi, even --help or a literal --task.
-    arguments = sys.argv[1:]
-    separator = arguments.index("--") if "--" in arguments else len(arguments)
-    options, pi_args = parser.parse_known_args(arguments[:separator])
-    for argument in pi_args:
-        if argument.split("=", 1)[0] in {"--workflow", "--harness"}:
-            parser.error("Workflow and harness selection were removed from this minimal entry point.")
-    pi_args.extend(arguments[separator + 1 :])
-    if options.task is not None:
-        pi_args.insert(0, f"@{options.task}")
-
-    # Replacing this process lets Pi own the terminal, signals and exit status.
     try:
-        os.execvp("pi", ["pi", *pi_args])
-    except FileNotFoundError:
-        parser.exit(127, "Pi was not found on PATH. Install it with:\n"
-                    "  npm install -g @earendil-works/pi-coding-agent@1.5.2\n")
-    except OSError as error:
-        parser.exit(126, f"Could not start Pi: {error}\n")
+        app(prog_name="fore-rsi")
+    except (NotImplementedError, TypeError, ValueError) as error:
+        raise SystemExit(str(error)) from None
 
 
 if __name__ == "__main__":

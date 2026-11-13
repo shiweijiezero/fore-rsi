@@ -7,21 +7,11 @@
 
 <p align="center">English · <a href="README_zh.md">简体中文</a></p>
 
-ForeRSI aims to support recursive self-improvement through collaborating agents. The current version is a small Python command-line entry point that launches Pi and passes it user input or a Markdown task file.
-
-Pi provides the terminal interface, model access, tools, and conversation history. Coordinator task management and Agent Team execution are not implemented in this version.
+ForeRSI uses Typer to parse command-line options. Each kind of configuration has its own dataclass and `handle()` method. The CLI validates the configurations before calling their handlers. Business handlers are currently skeletons: they report that their operation is not implemented. The workflow will own agent execution and scheduling, while Herdr provides the display.
 
 ## Install
 
-Requirements: Python 3.10 or later, Node.js 22.19.0 or later, and npm. ForeRSI uses Python's standard library at runtime; Pi is installed separately.
-
-Install the Pi version used by this project:
-
-```bash
-npm install -g @earendil-works/pi-coding-agent@1.5.2
-```
-
-From the ForeRSI repository root, create a Python environment and install the command:
+Requires Python 3.10 or later. From the repository root:
 
 ```bash
 python3 -m venv .venv
@@ -29,51 +19,40 @@ source .venv/bin/activate
 python -m pip install -e .
 ```
 
-Keep this environment active when using `fore-rsi`. The `pi` command must also be available on `PATH`.
+Installation includes Typer. Keep the environment active when using `fore-rsi`.
 
-## Use
-
-Open Pi's terminal interface in the directory where you want to work:
+## Options
 
 ```bash
-fore-rsi
+fore-rsi --help
+fore-rsi --version
+fore-rsi --task task.md --workflow workflow_name --harness harness_name
+fore-rsi --session session_name --detach
 ```
 
-Use Pi's `/login` to configure access, `/model` to choose a model, and `/thinking` to choose a reasoning level. Pi also supports provider API-key environment variables.
+Only these seven options are supported:
 
-Provide an initial message:
+| Option | Parsed value |
+| --- | --- |
+| `--version` | Print the version and exit |
+| `--help` | Print help and exit |
+| `--task FILE` | `TaskConfig(path: Path)` |
+| `--workflow NAME` | `WorkflowConfig(name: str)` |
+| `--harness NAME` | `HarnessConfig(name: str)` |
+| `--session ID` | `SessionConfig(session_id: str)` |
+| `--detach` | `DetachConfig(enabled=True)` |
 
-```bash
-fore-rsi "Review the requirements for improving inference throughput"
-```
+Only supplied business options create configuration objects. Parsing preserves relative paths without reading files. Quote values containing spaces. Subcommands, positional messages, and unknown options are rejected. All options belong to ForeRSI; parameters are not forwarded to Pi or Herdr. `--help` and `--version` work; invoking a business handler currently exits with an explicit not-implemented error.
 
-Or submit a Markdown file, optionally with a message. This example runs from the ForeRSI repository root:
+## Code structure
 
-```bash
-fore-rsi --task tasks/inference-optimization/sglang-throughput.md "First explain the goal and constraints"
-```
+- [src/cli.py](src/cli.py): `parse_args()` constructs and validates configurations; `cli()` calls their handlers; `main()` starts the CLI. Examples appear in both the source and `--help`.
+- [src/config.py](src/config.py): separate parameter dataclasses, each with a `handle()` method for its operation.
+- [src/config_validator.py](src/config_validator.py): checks configuration field types.
 
-`--task FILE` passes the file to Pi as `@FILE`; relative paths use the current working directory. Quote paths containing spaces. The task file is conversation input, not a command to start an Agent Team.
+When constructing configuration from Python, call `validate_config()` to check its types before `handle()`. Operation logic and any dependencies between operations will be added after their design is agreed.
 
-ForeRSI handles `--task`, `-h` / `--help`, and `--version`. Other arguments are passed to Pi. Arguments after `--` are passed to Pi without ForeRSI option parsing:
-
-```bash
-fore-rsi --help             # ForeRSI options
-fore-rsi --version          # ForeRSI version
-fore-rsi -- --help          # Pi options
-fore-rsi --model MODEL      # Choose a Pi model
-fore-rsi --resume           # Open Pi's session picker
-fore-rsi --continue         # Continue Pi's latest session for this directory
-fore-rsi --session ID       # Open a Pi session by ID
-```
-
-Session commands restore Pi conversations. ForeRSI does not maintain a separate task database or workflow state. The earlier `--workflow` and `--harness` options have been removed.
-
-## Develop
-
-Start with [src/cli.py](src/cli.py). The Python entry point parses ForeRSI options and hands control to the installed Pi command. Package metadata and the `fore-rsi` entry point are defined in [pyproject.toml](pyproject.toml).
-
-See the [contribution guide](CONTRIBUTING.md) for development checks and [documentation links](docs/README.md) for Pi's own guides.
+See the [contribution guide](CONTRIBUTING.md) for checks and [documentation links](docs/README.md) for references.
 
 ## License
 

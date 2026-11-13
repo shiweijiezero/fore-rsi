@@ -7,21 +7,11 @@
 
 <p align="center"><a href="README.md">English</a> · 简体中文</p>
 
-ForeRSI 希望通过 Agent 协作实现递归自我改进。当前版本是一个小型 Python 命令行入口，负责启动 Pi，并传入用户消息或 Markdown 任务文件。
-
-终端界面、模型接入、工具和对话历史由 Pi 提供。当前版本尚未实现 Coordinator 任务管理和 Agent Team 执行。
+ForeRSI 用 Typer 解析命令行参数。每种配置有独立的 dataclass 和 `handle()` 处理函数，CLI 先校验配置，再调用对应函数。业务处理函数目前只有骨架，会明确提示操作尚未实现。Agent 的运行与调度由 workflow 负责，Herdr 负责展示。
 
 ## 安装
 
-需要 Python 3.10 或更高版本、Node.js 22.19.0 或更高版本，以及 npm。ForeRSI 的 Python 运行代码只使用标准库；Pi 单独安装。
-
-安装本项目使用的 Pi 版本：
-
-```bash
-npm install -g @earendil-works/pi-coding-agent@1.5.2
-```
-
-在 ForeRSI 仓库根目录创建 Python 环境并安装命令：
+需要 Python 3.10 或更高版本。在仓库根目录执行：
 
 ```bash
 python3 -m venv .venv
@@ -29,51 +19,40 @@ source .venv/bin/activate
 python -m pip install -e .
 ```
 
-使用 `fore-rsi` 时保持这个环境激活，并确保 `PATH` 中能找到 `pi` 命令。
+安装包含 Typer。使用 `fore-rsi` 时保持环境激活。
 
-## 使用
-
-在希望处理的项目目录中打开 Pi 终端界面：
+## 参数
 
 ```bash
-fore-rsi
+fore-rsi --help
+fore-rsi --version
+fore-rsi --task task.md --workflow workflow_name --harness harness_name
+fore-rsi --session session_name --detach
 ```
 
-使用 Pi 的 `/login` 配置访问凭据，`/model` 选择模型，`/thinking` 选择推理强度。Pi 也支持模型服务商的 API Key 环境变量。
+只支持以下七个选项：
 
-直接提供初始消息：
+| 选项 | 解析结果 |
+| --- | --- |
+| `--version` | 显示版本并退出 |
+| `--help` | 显示帮助并退出 |
+| `--task FILE` | `TaskConfig(path: Path)` |
+| `--workflow NAME` | `WorkflowConfig(name: str)` |
+| `--harness NAME` | `HarnessConfig(name: str)` |
+| `--session ID` | `SessionConfig(session_id: str)` |
+| `--detach` | `DetachConfig(enabled=True)` |
 
-```bash
-fore-rsi "梳理提高推理吞吐的任务要求"
-```
+只为用户提供的业务选项创建对应配置对象。解析保留相对路径，不读取文件；值中有空格时加引号。子命令、位置消息参数和未知选项会报错。所有参数均属于 ForeRSI，不透传给 Pi 或 Herdr。`--help` 和 `--version` 可用；调用业务处理函数目前会以非零状态退出，明确提示尚未实现。
 
-也可以提交 Markdown 文件，并附加消息。以下示例在 ForeRSI 仓库根目录运行：
+## 代码结构
 
-```bash
-fore-rsi --task tasks/inference-optimization/sglang-throughput.md "先解释目标和约束"
-```
+- [src/cli.py](src/cli.py)：`parse_args()` 构造并校验各项配置，`cli()` 调用对应处理函数，`main()` 启动 CLI。源码和 `--help` 中均有使用例子。
+- [src/config.py](src/config.py)：各自独立的配置数据类，每个类用 `handle()` 定义对应操作。
+- [src/config_validator.py](src/config_validator.py)：检查配置字段类型。
 
-`--task FILE` 将文件作为 `@FILE` 传给 Pi；相对路径以当前工作目录为准。路径中有空格时加引号。任务文件是对话输入，不会据此启动 Agent Team。
+直接在 Python 中构造配置时，先调用 `validate_config()` 检查类型，再调用 `handle()`。具体操作逻辑及操作之间的依赖关系待设计确定后再补充。
 
-ForeRSI 处理 `--task`、`-h` / `--help` 和 `--version`，其他参数交给 Pi。`--` 后的参数全部交给 Pi，不再解析为 ForeRSI 选项：
-
-```bash
-fore-rsi --help             # ForeRSI 选项
-fore-rsi --version          # ForeRSI 版本
-fore-rsi -- --help          # Pi 选项
-fore-rsi --model MODEL      # 选择 Pi 模型
-fore-rsi --resume           # 打开 Pi 会话选择器
-fore-rsi --continue         # 继续当前目录最近的 Pi 会话
-fore-rsi --session ID       # 按 ID 打开 Pi 会话
-```
-
-会话命令恢复的是 Pi 对话。ForeRSI 不维护独立的任务数据库或工作流状态，原有的 `--workflow` 和 `--harness` 选项已移除。
-
-## 开发
-
-从 [src/cli.py](src/cli.py) 开始阅读。这个 Python 入口解析 ForeRSI 选项，再把控制交给已安装的 Pi 命令。包信息和 `fore-rsi` 命令入口定义在 [pyproject.toml](pyproject.toml)。
-
-开发检查见[贡献指南](CONTRIBUTING_zh.md)，Pi 使用指南见[文档链接](docs/README.md)。
+验证步骤见[贡献指南](CONTRIBUTING_zh.md)，参考资料见[文档链接](docs/README.md)。
 
 ## 许可证
 
