@@ -1,7 +1,7 @@
 use super::render::{display_width, put_right_text, put_text, ShellRenderState};
 use super::*;
 
-fn collapsed_groups_for_endpoint<'a>(
+pub(in crate::client::shell) fn collapsed_groups_for_endpoint<'a>(
     state: &'a ShellRenderState<'_>,
     endpoint_id: &ClientEndpointId,
 ) -> Option<&'a HashSet<String>> {
@@ -587,7 +587,7 @@ fn active_endpoint_label<'a>(state: &'a ShellRenderState<'_>) -> &'a str {
         .map_or("Local", |endpoint| endpoint.label.as_str())
 }
 
-fn render_endpoint_row(
+pub(in crate::client::shell) fn render_endpoint_row(
     buffer: &mut Buffer,
     rect: Rect,
     marker: &str,

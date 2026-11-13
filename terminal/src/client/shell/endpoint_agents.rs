@@ -94,6 +94,20 @@ impl ClientShellState {
         pane_id: &str,
         body_height: u16,
     ) {
+        if self.hits.agent_body.is_empty() {
+            if let Some(row) = super::render::sidebar_fore_rsi::endpoint_navigation_row_for_pane(
+                &self.endpoints,
+                &self.collapsed_endpoints,
+                &self.collapsed_groups,
+                &self.remote_collapsed_groups,
+                &self.config,
+                endpoint_id,
+                pane_id,
+            ) {
+                self.workspace_scroll = row.min(self.hits.workspace_max_scroll);
+            }
+            return;
+        }
         if body_height == 0 {
             return;
         }

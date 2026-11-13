@@ -87,6 +87,14 @@ impl ClientShellState {
                 &mut render_state,
                 &mut self.hits,
             );
+        } else if self.endpoints.len() > 1 && !self.sidebar_collapsed {
+            render::render_endpoint_sidebar(
+                &mut buffer,
+                sidebar,
+                &self.config,
+                &mut render_state,
+                &mut self.hits,
+            );
         } else {
             super::endpoint_sidebar::render_expanded(
                 &mut buffer,
