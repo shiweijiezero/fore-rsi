@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
 
-"""Parse ForeRSI options and hand the terminal over to Pi."""
+"""Parse ForeRSI options and lunch workflow loop"""
 
 import argparse
 import os

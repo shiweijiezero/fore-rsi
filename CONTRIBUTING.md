@@ -4,7 +4,7 @@ English | [简体中文](CONTRIBUTING_zh.md)
 
 ## Local development
 
-Follow the [README](README.md#install) to install Pi and create the Python environment. The editable install makes changes under `src/fore_rsi/` available to the `fore-rsi` command.
+Follow the [README](README.md#install) to install Pi and create the Python environment. The editable install makes changes under `src/` available to the `fore-rsi` command.
 
 The current implementation is a small Python CLI that launches Pi. Keep code easy to read and give each function a clear responsibility. Use Python type annotations and the standard library where practical. Keep Pi-specific behavior separate from future task-management logic.
 

@@ -71,7 +71,7 @@ fore-rsi --session ID       # 按 ID 打开 Pi 会话
 
 ## 开发
 
-从 [src/fore_rsi/cli.py](src/fore_rsi/cli.py) 开始阅读。这个 Python 入口解析 ForeRSI 选项，再把控制交给已安装的 Pi 命令。包信息和 `fore-rsi` 命令入口定义在 [pyproject.toml](pyproject.toml)。
+从 [src/cli.py](src/cli.py) 开始阅读。这个 Python 入口解析 ForeRSI 选项，再把控制交给已安装的 Pi 命令。包信息和 `fore-rsi` 命令入口定义在 [pyproject.toml](pyproject.toml)。
 
 开发检查见[贡献指南](CONTRIBUTING_zh.md)，Pi 使用指南见[文档链接](docs/README.md)。
 

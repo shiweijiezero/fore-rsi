@@ -71,7 +71,7 @@ Session commands restore Pi conversations. ForeRSI does not maintain a separate 
 
 ## Develop
 
-Start with [src/fore_rsi/cli.py](src/fore_rsi/cli.py). The Python entry point parses ForeRSI options and hands control to the installed Pi command. Package metadata and the `fore-rsi` entry point are defined in [pyproject.toml](pyproject.toml).
+Start with [src/cli.py](src/cli.py). The Python entry point parses ForeRSI options and hands control to the installed Pi command. Package metadata and the `fore-rsi` entry point are defined in [pyproject.toml](pyproject.toml).
 
 See the [contribution guide](CONTRIBUTING.md) for development checks and [documentation links](docs/README.md) for Pi's own guides.
 

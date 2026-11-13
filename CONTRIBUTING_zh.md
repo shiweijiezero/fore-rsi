@@ -4,7 +4,7 @@
 
 ## 本地开发
 
-按照 [README](README_zh.md#安装) 安装 Pi 并创建 Python 环境。可编辑安装后，`src/fore_rsi/` 下的修改会直接用于 `fore-rsi` 命令。
+按照 [README](README_zh.md#安装) 安装 Pi 并创建 Python 环境。可编辑安装后，`src/` 下的修改会直接用于 `fore-rsi` 命令。
 
 当前实现是一个启动 Pi 的小型 Python CLI。保持代码易读，让每个函数承担明确职责。使用 Python 类型标注，能用标准库解决时优先使用标准库。Pi 特有行为与未来的任务管理逻辑分开维护。
 
