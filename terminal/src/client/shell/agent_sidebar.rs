@@ -49,44 +49,6 @@ pub(super) fn ordered_agent_pane_ids(
         .collect()
 }
 
-pub(super) fn render_agent_panel(
-    buffer: &mut Buffer,
-    area: Rect,
-    snapshot: &ClientShellSnapshot,
-    config: &ClientShellConfig,
-    agent_scroll: &mut usize,
-    hits: &mut ShellHitMap,
-) {
-    if !render_agent_panel_header(
-        buffer,
-        area,
-        snapshot.agent_view_label.as_deref(),
-        config,
-        hits,
-    ) {
-        return;
-    }
-
-    let rows = agent_rows(snapshot, config, None);
-    render_agent_list(
-        buffer,
-        area,
-        &rows,
-        snapshot
-            .agent_view_label
-            .as_ref()
-            .map(|_| " no matching agents"),
-        config,
-        agent_scroll,
-        hits,
-        |row| row.rows.len(),
-        |buffer, rect, row, hits| {
-            hits.agents.push((rect, row.pane_id.clone()));
-            render_agent_row(buffer, rect, row, config);
-        },
-    );
-}
-
 pub(super) fn render_agent_panel_header(
     buffer: &mut Buffer,
     area: Rect,
@@ -232,17 +194,6 @@ pub(super) fn render_agent_list<T>(
         hits.agent_scrollbar = track;
         super::scroll::render_list_scrollbar(buffer, track, metrics, &config.palette);
     }
-}
-
-pub(super) fn agent_rows(
-    snapshot: &ClientShellSnapshot,
-    config: &ClientShellConfig,
-    machine: Option<&str>,
-) -> Vec<AgentRow> {
-    ordered_agent_pane_ids(snapshot, config.agent_panel_sort)
-        .into_iter()
-        .filter_map(|pane_id| agent_row(snapshot, &pane_id, config, machine))
-        .collect()
 }
 
 pub(super) fn agent_row(

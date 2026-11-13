@@ -1,7 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright contributors to the Herdr and ForeRSI projects
+
+//! Builds the vendored terminal library, preparing its host Zig compiler when absent.
+
 use std::env;
 use std::fs;
-use std::path::PathBuf;
-use std::process::Command;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+
+const ZIG_VERSION: &str = "0.16.0";
 
 fn zig_target(target: &str) -> &str {
     match target {
@@ -31,6 +38,73 @@ fn env_bool(name: &str) -> Option<bool> {
     }
 }
 
+fn zig_version(command: &str) -> Option<String> {
+    let output = Command::new(command).arg("version").output().ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+/// Reuse or prepare the host compiler and its vendored package cache.
+fn resolve_zig(manifest_dir: &Path, vendor_dir: &Path, host: &str) -> (String, PathBuf) {
+    let bootstrap = manifest_dir.join("../../scripts/ensure_zig.py");
+    let mut args = vec![
+        "-I".to_owned(),
+        bootstrap.display().to_string(),
+        "--host".to_owned(),
+        host.to_owned(),
+        "--version".to_owned(),
+        ZIG_VERSION.to_owned(),
+        "--vendor-dir".to_owned(),
+        vendor_dir.join("libghostty-vt").display().to_string(),
+    ];
+    if let Ok(explicit) = env::var("ZIG") {
+        assert_eq!(
+            zig_version(&explicit).as_deref(),
+            Some(ZIG_VERSION),
+            "ZIG must point to Zig {ZIG_VERSION}: {explicit}"
+        );
+        args.extend(["--zig".to_owned(), explicit]);
+    } else if let Some(system) = (zig_version("zig").as_deref() == Some(ZIG_VERSION))
+        .then(|| "zig".to_owned())
+    {
+        args.extend(["--zig".to_owned(), system]);
+    }
+    for python in ["python3", "python"] {
+        let output = match Command::new(python)
+            .args(&args)
+            .stderr(Stdio::inherit())
+            .output()
+        {
+            Ok(output) => output,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => panic!("could not start terminal toolchain preparation: {error}"),
+        };
+        assert!(
+            output.status.success(),
+            "automatic terminal toolchain preparation failed: {}",
+            output.status
+        );
+        let stdout = String::from_utf8(output.stdout)
+            .expect("terminal toolchain preparation returned non-UTF-8 output");
+        let lines = stdout
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>();
+        assert!(lines.len() >= 2, "terminal toolchain preparation returned incomplete paths");
+        let zig = lines[0].to_owned();
+        assert_eq!(
+            zig_version(&zig).as_deref(),
+            Some(ZIG_VERSION),
+            "invalid prepared Zig compiler: {zig}"
+        );
+        return (zig, PathBuf::from(lines[1]));
+    }
+    panic!("Python 3 is required to automatically prepare Zig {ZIG_VERSION}");
+}
+
 fn main() {
     // The vendored source stays at the repository root, shared with its maintenance scripts.
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
@@ -53,6 +127,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=LIBGHOSTTY_VT_SIMD");
     println!("cargo:rerun-if-env-changed=LIBGHOSTTY_VT_ZIG_SYSTEM_DIR");
     println!("cargo:rerun-if-env-changed=ZIG");
+    println!("cargo:rerun-if-changed=../../scripts/ensure_zig.py");
     println!("cargo:rerun-if-env-changed=LIBGHOSTTY_VT_WINDOWS_LIBC");
 
     let optimize = env::var("LIBGHOSTTY_VT_OPTIMIZE").unwrap_or_else(|_| "ReleaseFast".into());
@@ -69,8 +144,10 @@ fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
     let zig_prefix = out_dir.join("zig-out");
 
-    let zig = env::var("ZIG").unwrap_or_else(|_| "zig".into());
+    let host = env::var("HOST").expect("HOST");
+    let (zig, zig_global_cache) = resolve_zig(&manifest_dir, &vendor_dir, &host);
     let mut command = Command::new(&zig);
+    command.env("ZIG_GLOBAL_CACHE_DIR", zig_global_cache);
     command
         .arg("build")
         .arg("--prefix")
@@ -98,21 +175,11 @@ fn main() {
         .current_dir(&vendored_dir)
         .status()
         .unwrap_or_else(|err| {
-            if err.kind() == std::io::ErrorKind::NotFound {
-                panic!(
-                    "zig executable not found (looked for {zig:?}; set the ZIG \
-                     environment variable to point at the zig binary). Building \
-                     the vendored libghostty-vt requires Zig 0.16.0: install it from \
-                     https://ziglang.org/download/, then retry the build"
-                );
-            }
-            panic!("failed to execute zig build for vendored libghostty-vt: {err}");
+            panic!("failed to execute {zig:?} for vendored libghostty-vt: {err}")
         });
     assert!(
         status.success(),
-        "zig build for vendored libghostty-vt failed: {status}. \
-         Building Herdr requires Zig 0.16.0; check `zig version` \
-         or set ZIG to the path of a Zig 0.16.0 binary, then retry"
+        "Zig {ZIG_VERSION} build for vendored libghostty-vt failed: {status}"
     );
 
     let mut lib_dir = zig_prefix.join("lib");

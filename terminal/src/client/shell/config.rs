@@ -113,6 +113,7 @@ impl ClientShellConfig {
     pub(crate) fn from_config(config: &Config) -> Self {
         let theme_runtime = crate::app::client_theme_runtime_from_config(config);
         Self {
+            fore_rsi_labels: super::render::sidebar_fore_rsi::SidebarLabels::from_environment(),
             sidebar_width: config.ui.sidebar_width,
             sidebar_min_width: config.ui.sidebar_min_width,
             sidebar_max_width: config.ui.sidebar_max_width,

@@ -558,20 +558,6 @@ pub(crate) fn host_image_id(scope: &str, key: &SurfaceGraphicsAssetKey) -> u32 {
     10_000 + ((hasher.finish() as u32) % 900_000)
 }
 
-#[cfg(all(test, unix))]
-pub(crate) fn direct_upload_control(scope: &str, key: &SurfaceGraphicsAssetKey) -> (u32, String) {
-    let image_id = host_image_id(scope, key);
-    (
-        image_id,
-        format!(
-            "a=t,f={},s={},v={},i={image_id},q=0",
-            format_code(key.format),
-            key.image_width,
-            key.image_height
-        ),
-    )
-}
-
 pub(crate) fn collect_scene(
     app: &crate::app::App,
     surface: crate::ui::TabSurfaceView<'_>,

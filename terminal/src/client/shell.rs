@@ -41,8 +41,6 @@ use word_selection::ClientWordSelection;
 
 pub(in crate::client::shell) use render::sidebar;
 pub(crate) use state::*;
-#[cfg(test)]
-pub(super) use surface_patch::apply_composed_surface_patch;
 pub(super) use surface_patch::{ClientComposedSurfacePatch, ClientPaneSurfacePatchOutcome};
 
 use crossterm::event::KeyCode;

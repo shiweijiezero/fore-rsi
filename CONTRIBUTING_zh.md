@@ -17,6 +17,18 @@ CLI 通过 `importlib.metadata` 读取安装版本；[pyproject.toml](pyproject.
 
 中英文文档保持一致。命令、示例和配置字段一起更新。凭据、私有基础设施信息和本地运行数据保留在仓库之外。
 
+## Pre-commit
+
+在当前 Python 环境中安装仓库钩子，并在提交改动前运行完整检查：
+
+```bash
+python -m pip install pre-commit
+pre-commit install
+pre-commit run --all-files
+```
+
+钩子会检查仓库文件规范、Python 语法、终端 Rust 格式以及严格 Clippy。
+
 ## 验证改动
 
 ```bash

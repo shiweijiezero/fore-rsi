@@ -17,6 +17,18 @@ The CLI reads the installed version through `importlib.metadata`; [pyproject.tom
 
 Keep English and Chinese documentation aligned. Update commands, examples, and configuration fields together. Keep credentials, private infrastructure details, and local runtime data outside the repository.
 
+## Pre-commit
+
+Install the repository hooks in the active Python environment and run the complete check before submitting changes:
+
+```bash
+python -m pip install pre-commit
+pre-commit install
+pre-commit run --all-files
+```
+
+The hooks run repository hygiene checks, Python syntax validation, terminal formatting, and strict terminal Clippy.
+
 ## Verify changes
 
 ```bash

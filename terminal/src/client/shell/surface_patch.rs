@@ -255,18 +255,3 @@ impl ClientShellState {
         ClientPaneSurfacePatchOutcome::Applied(composed_patch)
     }
 }
-
-#[cfg(test)]
-pub(crate) fn apply_composed_surface_patch(
-    frame: &FrameData,
-    patch: ClientComposedSurfacePatch,
-) -> Option<FrameData> {
-    let mut next = frame.clone();
-    for row in &patch.rows {
-        if !apply_row(row, &mut next) {
-            return None;
-        }
-    }
-    next.cursor = patch.cursor;
-    Some(next)
-}

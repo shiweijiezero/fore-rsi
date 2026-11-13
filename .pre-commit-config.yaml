@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
+#
+# Runs repository hygiene checks and the owning Python and terminal checks.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^terminal/(vendor|tests/fixtures)/|\.patch$
+      - id: end-of-file-fixer
+        exclude: ^terminal/(vendor|tests/fixtures)/
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        exclude: ^terminal/vendor/
+      - id: check-json
+        exclude: ^terminal/\.zed/settings\.json$
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: detect-private-key
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: local
+    hooks:
+      - id: fore-rsi-python-syntax
+        name: ForeRSI Python syntax
+        entry: python3 -I -m compileall -q src terminal/scripts
+        language: system
+        files: \.(py|pyi)$
+        pass_filenames: false
+
+      - id: fore-rsi-terminal-format
+        name: ForeRSI terminal rustfmt
+        entry: cargo fmt --manifest-path terminal/Cargo.toml --check
+        language: system
+        files: ^terminal/
+        pass_filenames: false
+
+      - id: fore-rsi-terminal-clippy
+        name: ForeRSI terminal clippy
+        entry: cargo clippy --manifest-path terminal/Cargo.toml --all-targets --locked -- -D warnings
+        language: system
+        files: ^terminal/
+        pass_filenames: false

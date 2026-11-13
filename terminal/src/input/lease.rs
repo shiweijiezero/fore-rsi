@@ -275,11 +275,6 @@ where
     }
 
     #[cfg(test)]
-    pub(crate) fn is_empty(&self) -> bool {
-        self.leases.is_empty()
-    }
-
-    #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.leases.len()
     }

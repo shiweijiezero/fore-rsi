@@ -354,46 +354,6 @@ impl ClientShellState {
         );
     }
 
-    #[cfg(test)]
-    pub(crate) fn set_test_endpoint_agent_view(
-        &mut self,
-        endpoint_id: &ClientEndpointId,
-        view: Option<crate::api::schema::AgentViewSetParams>,
-    ) {
-        let Some((boot_id, revision)) = self
-            .endpoints
-            .iter()
-            .find(|endpoint| &endpoint.endpoint_id == endpoint_id)
-            .and_then(|endpoint| {
-                endpoint
-                    .snapshot
-                    .as_deref()
-                    .map(|snapshot| (snapshot.boot_id.clone(), snapshot.revision))
-            })
-        else {
-            return;
-        };
-        self.set_endpoint_agent_view_projection_supported(endpoint_id, true);
-        self.set_endpoint_agent_view_projection(endpoint_id, None, boot_id, revision, Ok(view));
-    }
-
-    #[cfg(test)]
-    pub(crate) fn set_test_endpoint_agent_view_projection(
-        &mut self,
-        endpoint_id: &ClientEndpointId,
-        boot_id: &str,
-        revision: u64,
-        view: Option<crate::api::schema::AgentViewSetParams>,
-    ) {
-        self.set_endpoint_agent_view_projection(
-            endpoint_id,
-            None,
-            boot_id.to_owned(),
-            revision,
-            Ok(view),
-        );
-    }
-
     fn set_endpoint_agent_view_projection(
         &mut self,
         endpoint_id: &ClientEndpointId,
