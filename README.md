@@ -26,8 +26,11 @@ Installation includes Typer. Keep the environment active when using `fore-rsi`.
 ```bash
 fore-rsi --help
 fore-rsi --version
-fore-rsi --task task.md --workflow workflow_name --harness harness_name
-fore-rsi --session session_name --detach
+fore-rsi --task task.md
+fore-rsi --workflow workflow_name
+fore-rsi --harness harness_name
+fore-rsi --session session_name
+fore-rsi --detach
 ```
 
 Only these seven options are supported:

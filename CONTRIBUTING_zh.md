@@ -17,8 +17,11 @@ Typer 统一定义 ForeRSI 参数；`config.py` 中每种配置的 dataclass 保
 ```bash
 fore-rsi --help
 fore-rsi --version
-fore-rsi --task task.md --workflow workflow_name --harness harness_name
-fore-rsi --session session_name --detach
+fore-rsi --task task.md
+fore-rsi --workflow workflow_name
+fore-rsi --harness harness_name
+fore-rsi --session session_name
+fore-rsi --detach
 ```
 
 修改 CLI 时检查参数与各自 dataclass、处理函数的对应关系、带空格的值，以及对子命令、位置消息参数和未知选项的拒绝。当前支持的选项为 `--version`、`--help`、`--task`、`--workflow`、`--harness`、`--session`、`--detach`。修改 dataclass 时检查手动构造的非法字段类型。

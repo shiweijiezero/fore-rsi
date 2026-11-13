@@ -26,8 +26,11 @@ python -m pip install -e .
 ```bash
 fore-rsi --help
 fore-rsi --version
-fore-rsi --task task.md --workflow workflow_name --harness harness_name
-fore-rsi --session session_name --detach
+fore-rsi --task task.md
+fore-rsi --workflow workflow_name
+fore-rsi --harness harness_name
+fore-rsi --session session_name
+fore-rsi --detach
 ```
 
 只支持以下七个选项：

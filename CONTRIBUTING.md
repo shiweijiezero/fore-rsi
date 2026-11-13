@@ -17,8 +17,11 @@ These commands do not call a model or create agents:
 ```bash
 fore-rsi --help
 fore-rsi --version
-fore-rsi --task task.md --workflow workflow_name --harness harness_name
-fore-rsi --session session_name --detach
+fore-rsi --task task.md
+fore-rsi --workflow workflow_name
+fore-rsi --harness harness_name
+fore-rsi --session session_name
+fore-rsi --detach
 ```
 
 For CLI changes, check how options map to their dataclasses and handlers, values containing spaces, and rejection of subcommands, positional messages, and unknown options. The supported options are `--version`, `--help`, `--task`, `--workflow`, `--harness`, `--session`, and `--detach`. For dataclass changes, check invalid types supplied by Python callers.
