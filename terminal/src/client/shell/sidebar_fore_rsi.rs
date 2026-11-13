@@ -206,18 +206,6 @@ fn navigation_rows<'a>(
     rows
 }
 
-/// Find a pane's row in the unified tree for keyboard navigation.
-pub(crate) fn navigation_row_for_pane(
-    snapshot: &ClientShellSnapshot,
-    config: &ClientShellConfig,
-    collapsed_groups: &HashSet<String>,
-    pane_id: &str,
-) -> Option<usize> {
-    navigation_rows(snapshot, config, collapsed_groups)
-        .iter()
-        .position(|row| matches!(row, NavigationRow::Agent { pane, .. } if pane.pane_id == pane_id))
-}
-
 fn endpoint_navigation_rows<'a>(
     endpoints: &'a [ClientShellEndpoint],
     collapsed_endpoints: &HashSet<ClientEndpointId>,
@@ -251,15 +239,49 @@ fn endpoint_navigation_rows<'a>(
     rows
 }
 
-pub(crate) fn endpoint_navigation_row_for_pane(
+/// Expand the owning navigation scopes and return a pane's row in the unified tree.
+///
+/// Focus actions use this same projection path as rendering so a pane hidden by a
+/// collapsed endpoint or worktree group becomes visible before its row is revealed.
+pub(crate) fn reveal_endpoint_pane(
     endpoints: &[ClientShellEndpoint],
-    collapsed_endpoints: &HashSet<ClientEndpointId>,
-    collapsed_groups: &HashSet<String>,
-    remote_collapsed_groups: &HashMap<ClientEndpointId, HashSet<String>>,
+    collapsed_endpoints: &mut HashSet<ClientEndpointId>,
+    collapsed_groups: &mut HashSet<String>,
+    remote_collapsed_groups: &mut HashMap<ClientEndpointId, HashSet<String>>,
     config: &ClientShellConfig,
     endpoint_id: &ClientEndpointId,
     pane_id: &str,
 ) -> Option<usize> {
+    collapsed_endpoints.remove(endpoint_id);
+    let worktree_key = endpoints
+        .iter()
+        .find(|endpoint| &endpoint.endpoint_id == endpoint_id)
+        .and_then(|endpoint| endpoint.snapshot.as_deref())
+        .and_then(|snapshot| {
+            let agent = snapshot
+                .agents
+                .iter()
+                .find(|agent| agent.pane_id == pane_id)?;
+            let workspace = snapshot
+                .workspaces
+                .iter()
+                .find(|workspace| workspace.workspace_id == agent.workspace_id)?;
+            workspace
+                .worktree
+                .as_ref()
+                .filter(|worktree| worktree.is_linked_worktree)
+                .map(|worktree| worktree.key.clone())
+        });
+    if let Some(worktree_key) = worktree_key {
+        if endpoint_id.is_local() {
+            collapsed_groups.remove(&worktree_key);
+        } else {
+            remote_collapsed_groups
+                .entry(endpoint_id.clone())
+                .or_default()
+                .remove(&worktree_key);
+        }
+    }
     endpoint_navigation_rows(
         endpoints,
         collapsed_endpoints,

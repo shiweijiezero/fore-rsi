@@ -927,20 +927,17 @@ impl ClientShellState {
                 {
                     if self.hits.agent_body.is_empty() {
                         let endpoint_id = self.active_endpoint_id.clone();
-                        self.reveal_agent_workspace(&endpoint_id, &pane_id);
-                        let scroll = self
-                            .snapshot
-                            .as_deref()
-                            .and_then(|snapshot| {
-                                super::render::sidebar_fore_rsi::navigation_row_for_pane(
-                                    snapshot,
-                                    &self.config,
-                                    &self.collapsed_groups,
-                                    &pane_id,
-                                )
-                            })
-                            .unwrap_or(next)
-                            .min(self.hits.workspace_max_scroll);
+                        let scroll = super::render::sidebar_fore_rsi::reveal_endpoint_pane(
+                            &self.endpoints,
+                            &mut self.collapsed_endpoints,
+                            &mut self.collapsed_groups,
+                            &mut self.remote_collapsed_groups,
+                            &self.config,
+                            &endpoint_id,
+                            &pane_id,
+                        )
+                        .unwrap_or(next)
+                        .min(self.hits.workspace_max_scroll);
                         self.workspace_scroll = scroll;
                     } else {
                         self.agent_scroll = next.min(self.hits.agent_max_scroll);
