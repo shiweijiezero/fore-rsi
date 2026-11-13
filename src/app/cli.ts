@@ -13,7 +13,7 @@
 import { Command, Option } from "commander";
 import metadata from "../../package.json" with { type: "json" };
 import { createPiExtension } from "../harnesses-backend/pi.ts";
-import { workflowNames } from "../rsi-workflows/agent-team/coordinator/task-requirements.ts";
+import { workflowNames } from "../rsi-workflows/agent-team/coordinator/task-requirements.ts"; // 这里逻辑有问题
 
 /** Parse ForeRSI options and pass the remaining arguments to Pi. */
 async function main(): Promise<void> {
@@ -58,7 +58,7 @@ async function runPiCli(args: string[], workflow?: string): Promise<void> {
   const { main: piMain } = await import("@earendil-works/pi-coding-agent");
   await piMain(args, {
     extensionFactories: [
-      createPiExtension(workflow), // src/harnesses-backend/pi.ts: enter the team workflow with Pi's extension API.
+      createPiExtension(workflow), // move the logic to src/harnesses-backend/pi.ts: enter the team workflow with Pi's extension API.
     ],
   });
 }

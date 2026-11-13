@@ -61,8 +61,6 @@ PYTHONPATH="$PWD/python${PYTHONPATH:+:$PYTHONPATH}" \
   --host 127.0.0.1 --port "$SGLANG_PORT"
 ```
 
-Run the measurements below from the same candidate checkout, using its endpoint and iteration binding and the shared task configuration.
-
 ## Evaluate
 
 ### Routine performance: random
@@ -96,8 +94,6 @@ done
 
 ### Answer quality when needed: GSM8K
 
-Use the same generation budget for the candidate and its controls. This direct-endpoint recipe requests at most 32,768 generated tokens per question; the deployed context must also accommodate the rendered input. Count truncated or failed answers in the evaluation result.
-
 ```bash
 foretoken eval --url "$MODEL_SERVICE_URL" --model "$MODEL_ID" \
   --evaluator lm-eval --tasks gsm8k --num_fewshot 0 --limit 20 \
@@ -107,11 +103,3 @@ foretoken eval --url "$MODEL_SERVICE_URL" --model "$MODEL_ID" \
   --wandb-project "$WANDB_PROJECT" --wandb-group "$WANDB_GROUP" \
   --wandb-run-name "${ITERATION}-gsm8k"
 ```
-
-## Deliverables
-
-For each iteration, retain the motivation, source and configuration changes, exact deployment and evaluation commands, measurements, analysis, time spent, and next decision. Link raw results, figures, and W&B runs from the iteration notes.
-
-Deliver the retained configuration and code changes with per-workload C1/C16 comparisons against the original configuration and actual parent. Explain the measured gains, regressions, and answer-quality evidence. Distinguish unsuccessful experiments from unimplemented ideas.
-
-Finish within the time budget, stop task-owned experiments and services, and preserve the results and reproducible changes.
