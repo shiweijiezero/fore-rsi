@@ -5,11 +5,26 @@
   </picture>
 </h1>
 
+<p align="center">An RSI framework built around Agent Teams: explore approaches in parallel, execute work, verify results, and improve through feedback.</p>
+
 <p align="center">English · <a href="README_zh.md">简体中文</a></p>
 
-ForeRSI uses Typer to parse command-line options. Each kind of configuration has its own dataclass and `handle()` method. The CLI validates the configurations before calling their handlers. Business handlers are currently skeletons: they report that their operation is not implemented. The workflow will own agent execution and scheduling, while Herdr provides the display.
+ForeRSI is a recursive self-improvement (RSI) framework for turning objectives and constraints into sustained, verifiable work. Its goal is to let Agent Teams explore alternatives, collaborate on execution, and use evidence to improve both their results and their working methods.
 
-## Install
+Long-running optimization and research require repeated rounds of proposing approaches, implementing them, measuring outcomes, and comparing evidence. People often spend much of that time coordinating handoffs, tracking progress, and collecting results. ForeRSI aims to give the team responsibility for that ongoing iteration, so people can focus on objectives, constraints, and evaluation.
+
+The design favors decentralized collaboration: agents communicate directly and share progress, reducing information bottlenecks so independent work can advance in parallel. Users provide objectives, materials, constraints, resources, and time budgets; a workflow organizes the team around them.
+
+The workflow and UI have distinct responsibilities:
+
+- **Workflow** owns task input and defines agent roles, collaboration and handoff rules, scheduling, and task progress. It selects the harness, the execution backend through which agents carry out work.
+- **UI** shows the team's progress and results to users through Herdr and its named display sessions.
+
+**Current stage:** the Python CLI parses options into one configuration; workflow execution and the Herdr UI are not connected yet. `--help` and `--version` work, while task commands currently exit with a single not-implemented message; the following sections describe the intended system.
+
+## Quick start
+
+### Install
 
 Requires Python 3.10 or later. From the repository root:
 
@@ -19,43 +34,57 @@ source .venv/bin/activate
 python -m pip install -e .
 ```
 
-Installation includes Typer. Keep the environment active when using `fore-rsi`.
+Keep this environment active when using `fore-rsi`. View the available options with `fore-rsi --help`.
 
-## Options
+### Provide a task
+
+Describe the objective, constraints, available resources, and evidence needed to judge the result in a Markdown file. The [SGLang throughput task](tasks/inference-optimization/sglang-throughput.md) is one example:
 
 ```bash
-fore-rsi --help
-fore-rsi --version
-fore-rsi --task task.md
-fore-rsi --workflow workflow_name
-fore-rsi --harness harness_name
-fore-rsi --session session_name
-fore-rsi --detach
+fore-rsi --task tasks/inference-optimization/sglang-throughput.md
 ```
 
-Only these seven options are supported:
+Only supply the options you need. `--workflow` selects a workflow, `--harness` selects its execution backend, and `--session` names a Herdr display session. See the [CLI reference](docs/cli.md) for their meanings.
 
-| Option | Parsed value |
-| --- | --- |
-| `--version` | Print the version and exit |
-| `--help` | Print help and exit |
-| `--task FILE` | `TaskConfig(path: Path)` |
-| `--workflow NAME` | `WorkflowConfig(name: str)` |
-| `--harness NAME` | `HarnessConfig(name: str)` |
-| `--session ID` | `SessionConfig(session_id: str)` |
-| `--detach` | `DetachConfig(enabled=True)` |
+## The improvement loop
 
-Only supplied business options create configuration objects. Parsing preserves relative paths without reading files. Quote values containing spaces. Subcommands, positional messages, and unknown options are rejected. All options belong to ForeRSI; parameters are not forwarded to Pi or Herdr. `--help` and `--version` work; invoking a business handler currently exits with an explicit not-implemented error.
+<p align="center">
+  <img src="docs/assets/improvement-loop.svg" alt="Agent Teams explore, execute, and verify; the Watchdog oversees collaboration; humans and agents improve ForeRSI through separate maintenance tasks." width="564">
+</p>
 
-## Code structure
+### Task iteration
 
-- [src/cli.py](src/cli.py): `parse_args()` constructs and validates configurations; `cli()` calls their handlers; `main()` starts the CLI. Examples appear in both the source and `--help`.
-- [src/config.py](src/config.py): separate parameter dataclasses, each with a `handle()` method for its operation.
-- [src/config_validator.py](src/config_validator.py): checks configuration field types.
+1. Explore approaches: examine the available materials and possible paths against the objectives and constraints, then develop an actionable plan.
+2. Execute the plan: carry out the work and produce code, configuration, analyses, documents, or other outputs ready for verification.
+3. Verify results: gather evidence through tests, measurements, simulations, or human review, assess the outcome against the objectives, and decide what to retain or revise.
 
-When constructing configuration from Python, call `validate_config()` to check its types before `handle()`. Operation logic and any dependencies between operations will be added after their design is agreed.
+Feedback guides the next round of exploration and execution. The team can also seek feedback while exploring an approach. In this workflow, the Coordinator connects user requirements with task progress, while the Checker reviews plans, work, and conclusions at relevant stages.
 
-See the [contribution guide](CONTRIBUTING.md) for checks and [documentation links](docs/README.md) for references.
+Through the Coordinator, users can add materials, refine requirements, and pause or resume the task.
+
+### Watchdog: improve team collaboration
+
+The Watchdog periodically reviews progress and collaboration, identifies stalled work, repeated attempts, and handoff problems, and follows up with the members responsible. It assesses how effectively the workflow advances the task and captures reusable lessons.
+
+### Humans and agents: improve ForeRSI
+
+Humans and agents use task experience and Watchdog feedback to improve workflows and the supporting framework. Changes to collaboration rules, prompts, tools, scheduling, recovery, and harness integration are developed as separate maintenance tasks, validated, and then applied to subsequent work.
+
+## Design a custom RSI workflow
+
+A workflow defines team roles, tools, execution steps, and handoff rules. It can carry domain prompts, reference materials, methods, and evaluation criteria, and determine how task requirements configure the team and its harnesses.
+
+The same improvement loop can serve different kinds of work:
+
+- Software development: implement features or algorithms and refine them through testing and feedback.
+- Inference optimization: improve code, configuration, and runtime performance in systems such as Foretoken, SGLang, and vLLM.
+- Scientific research: combine domain literature, data, simulations, and expert review.
+
+## Contributing
+
+Contributions to ForeRSI are welcome. See the [contribution guide](CONTRIBUTING.md) for development and validation, and the [documentation](docs/README.md) for references.
+
+Thank you to all [contributors](https://github.com/shiweijiezero/fore-rsi/graphs/contributors) who help improve ForeRSI through code, documentation, ideas, and feedback.
 
 ## License
 

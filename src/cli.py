@@ -1,82 +1,43 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
 
-"""Parse ForeRSI options. Workflow execution is not connected yet.
+"""ForeRSI command-line entry point."""
 
-Examples:
-
-    fore-rsi --help
-
-    fore-rsi --version
-
-    fore-rsi --task task.md
-
-    fore-rsi --workflow workflow_name
-
-    fore-rsi --harness harness_name
-
-    fore-rsi --session session_name
-
-    fore-rsi --detach
-"""
-
-from pathlib import Path
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from importlib.metadata import version
 from typing import Annotated
 
-import typer
+import tyro
 
-from config import Config, DetachConfig, HarnessConfig, SessionConfig, TaskConfig, WorkflowConfig
-from config_validator import validate_config
-
-app = typer.Typer(add_completion=False, pretty_exceptions_enable=False)
+from config import Config
 
 
-def parse_args(
-    task: Path | None = None,
-    workflow: str | None = None,
-    harness: str | None = None,
-    session: str | None = None,
-    detach: bool = False,
-) -> list[Config]:
-    """Convert supplied options into their corresponding configurations."""
-    configs: list[Config] = []
-    if task is not None:
-        configs.append(TaskConfig(path=task))
-    if workflow is not None:
-        configs.append(WorkflowConfig(name=workflow))
-    if harness is not None:
-        configs.append(HarnessConfig(name=harness))
-    if session is not None:
-        configs.append(SessionConfig(session_id=session))
-    if detach is not False:
-        configs.append(DetachConfig(enabled=detach))
-    for config in configs:
-        validate_config(config)
-    return configs
+@dataclass
+class _CommandLine:
+    # Show the installed ForeRSI version and exit.
+    version: Annotated[bool, tyro.conf.arg(help_behavior_hint="")] = False
+    options: Annotated[Config, tyro.conf.arg(name="")] = field(default_factory=Config)
 
 
-@app.command(help=__doc__)
-def cli(
-    task: Annotated[Path | None, typer.Option("--task", help="Markdown task file")] = None,
-    workflow: Annotated[str | None, typer.Option("--workflow", help="Workflow selection")] = None,
-    harness: Annotated[str | None, typer.Option("--harness", help="Harness selection")] = None,
-    session: Annotated[str | None, typer.Option("--session", help="Session identifier")] = None,
-    detach: Annotated[bool, typer.Option("--detach", help="Request detached operation")] = False,
-    version: Annotated[bool, typer.Option("--version", help="Show version and exit")] = False,
-) -> None:
-    """Parse options and dispatch each configuration to its handler."""
-    if version:
-        typer.echo("fore-rsi 0.0.1")
-        raise typer.Exit()
-    for config in parse_args(task, workflow, harness, session, detach):
-        config.handle()
+def parse_args(args: Sequence[str] | None = None) -> Config:
+    """Build a run configuration from command-line arguments."""
+    command = tyro.cli(
+        _CommandLine,
+        prog="fore-rsi",
+        description="Run agent teams with feedback-driven workflows.",
+        args=args,
+        config=(tyro.conf.DisallowNone, tyro.conf.FlagCreatePairsOff),
+    )
+    if command.version:
+        print(f"fore-rsi {version('fore-rsi')}")
+        raise SystemExit(0)
+    return command.options
 
 
-def main() -> None:
-    try:
-        app(prog_name="fore-rsi")
-    except (NotImplementedError, TypeError, ValueError) as error:
-        raise SystemExit(str(error)) from None
+def main(args: Sequence[str] | None = None) -> None:
+    parse_args(args)
+    raise SystemExit("Workflow execution is not implemented.")
 
 
 if __name__ == "__main__":

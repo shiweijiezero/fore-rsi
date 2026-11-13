@@ -1,55 +1,36 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
 
-"""Each configuration owns its parameters and handling logic."""
+"""Workflow and display configuration for a ForeRSI run."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Annotated
 
-
-@dataclass
-class TaskConfig:
-    path: Path
-
-    def handle(self) -> None:
-        """TODO: implement task input handling here."""
-        raise NotImplementedError("Task handling is not implemented yet.")
+from tyro.conf import arg
 
 
 @dataclass
 class WorkflowConfig:
-    name: str
+    """Task and agent execution."""
 
-    def handle(self) -> None:
-        """TODO: implement workflow selection here."""
-        raise NotImplementedError("Workflow selection is not implemented yet.")
-
-
-@dataclass
-class HarnessConfig:
-    name: str
-
-    def handle(self) -> None:
-        """TODO: implement harness selection here."""
-        raise NotImplementedError("Harness selection is not implemented yet.")
+    # Select a workflow.
+    name: Annotated[str | None, arg(name="workflow", prefix_name=False)] = None
+    # Markdown task file.
+    task: Annotated[Path | None, arg(prefix_name=False)] = None
+    # Select the workflow's agent execution backend.
+    harness: Annotated[str | None, arg(prefix_name=False)] = None
 
 
 @dataclass
-class SessionConfig:
-    session_id: str
+class UIConfig:
+    """Herdr display."""
 
-    def handle(self) -> None:
-        """TODO: implement session handling here."""
-        raise NotImplementedError("Session handling is not implemented yet.")
+    # Use or create a named Herdr session.
+    session: Annotated[str | None, arg(prefix_name=False)] = None
 
 
 @dataclass
-class DetachConfig:
-    enabled: bool = True
-
-    def handle(self) -> None:
-        """TODO: implement detached operation here."""
-        raise NotImplementedError("Detached operation is not implemented yet.")
-
-
-Config = TaskConfig | WorkflowConfig | HarnessConfig | SessionConfig | DetachConfig
+class Config:
+    workflow: WorkflowConfig = field(default_factory=WorkflowConfig)
+    ui: UIConfig = field(default_factory=UIConfig)

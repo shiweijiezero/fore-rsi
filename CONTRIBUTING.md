@@ -6,27 +6,28 @@ English | [简体中文](CONTRIBUTING_zh.md)
 
 Follow the [README](README.md#install) to create the Python environment and install. An editable installation makes changes under `src/` available to the `fore-rsi` command.
 
-Declare ForeRSI options through Typer. Each configuration dataclass in `config.py` holds its parameters and defines a `handle()` method; `config_validator.py` checks their types. Give each function a clear responsibility and keep code readable. The workflow owns agent execution; Herdr provides the display. Business handlers are currently skeletons.
+## Configuration and execution
+
+- [src/config.py](src/config.py) defines `Config`, `WorkflowConfig`, and `UIConfig`. Task and harness settings belong to `WorkflowConfig`; the named Herdr session belongs to `UIConfig`.
+- [src/cli.py](src/cli.py) uses tyro to generate options from these dataclasses and return one complete `Config`. It also handles help and version output. Keep option names, defaults, types, and help with the configuration definitions.
+
+Keep configuration as data. The CLI handles argument conversion; the workflow owns business validation, agent roles, scheduling, and management rules, harnesses execute agents, and Herdr provides the display. Avoid maintaining a second list of field types or a separate handler for each option.
+
+The CLI reads the installed version through `importlib.metadata`; [pyproject.toml](pyproject.toml) is the source for package version metadata.
 
 Keep English and Chinese documentation aligned. Update commands, examples, and configuration fields together. Keep credentials, private infrastructure details, and local runtime data outside the repository.
 
 ## Verify changes
 
-These commands do not call a model or create agents:
-
 ```bash
 fore-rsi --help
 fore-rsi --version
-fore-rsi --task task.md
-fore-rsi --workflow workflow_name
-fore-rsi --harness harness_name
-fore-rsi --session session_name
-fore-rsi --detach
+python -m unittest discover -s tests
 ```
 
-For CLI changes, check how options map to their dataclasses and handlers, values containing spaces, and rejection of subcommands, positional messages, and unknown options. The supported options are `--version`, `--help`, `--task`, `--workflow`, `--harness`, `--session`, and `--detach`. For dataclass changes, check invalid types supplied by Python callers.
+For CLI changes, check omitted values, individual and combined options, paths and session names containing spaces, and rejection of unknown arguments. Verify that workflow settings and UI settings land in the correct nested configuration, and that help and version exit successfully. The user-facing option reference is [docs/cli.md](docs/cli.md).
 
-The first two commands should succeed. The business examples currently exit nonzero with a not-implemented message. Use stand-in handlers to check dispatch without running a workflow. Record commands and actual results; keep tests and dependencies proportionate to the code.
+The tests cover parsing and command output without calling models. Record commands and actual results; keep tests and dependencies proportionate to the change.
 
 ## Pull requests
 

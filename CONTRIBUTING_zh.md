@@ -6,27 +6,28 @@
 
 按照 [README](README_zh.md#安装) 创建 Python 环境并安装。可编辑安装后，`src/` 下的修改会直接用于 `fore-rsi` 命令。
 
-Typer 统一定义 ForeRSI 参数；`config.py` 中每种配置的 dataclass 保存对应参数并定义 `handle()` 函数，`config_validator.py` 检查类型。让每个函数承担明确职责，保持代码易读。Agent 运行管理属于 workflow，Herdr 用于展示；业务处理函数目前只有骨架。
+## 配置与执行
+
+- [src/config.py](src/config.py) 定义 `Config`、`WorkflowConfig` 和 `UIConfig`。任务与 harness 设置属于 `WorkflowConfig`，Herdr 命名会话属于 `UIConfig`。
+- [src/cli.py](src/cli.py) 使用 tyro 从这些 dataclass 生成参数，返回一个完整的 `Config`，并处理帮助与版本输出。参数名称、默认值、类型和帮助说明随配置定义维护。
+
+配置只保存数据。CLI 负责参数转换，workflow 负责业务校验、Agent 角色、调度和管理规则，harness 执行 Agent，Herdr 负责展示。避免另行维护一份字段类型清单，或为每个参数设置独立执行函数。
+
+CLI 通过 `importlib.metadata` 读取安装版本；[pyproject.toml](pyproject.toml) 是包版本元数据的来源。
 
 中英文文档保持一致。命令、示例和配置字段一起更新。凭据、私有基础设施信息和本地运行数据保留在仓库之外。
 
 ## 验证改动
 
-以下命令不会调用模型，也不会创建 Agent：
-
 ```bash
 fore-rsi --help
 fore-rsi --version
-fore-rsi --task task.md
-fore-rsi --workflow workflow_name
-fore-rsi --harness harness_name
-fore-rsi --session session_name
-fore-rsi --detach
+python -m unittest discover -s tests
 ```
 
-修改 CLI 时检查参数与各自 dataclass、处理函数的对应关系、带空格的值，以及对子命令、位置消息参数和未知选项的拒绝。当前支持的选项为 `--version`、`--help`、`--task`、`--workflow`、`--harness`、`--session`、`--detach`。修改 dataclass 时检查手动构造的非法字段类型。
+修改 CLI 时检查省略值、单独与组合参数、带空格的路径及会话名，以及对未知参数的拒绝。确认 workflow 与 UI 设置归入正确的嵌套配置，帮助与版本命令正常退出。面向用户的参数参考见 [docs/cli.md](docs/cli.md)。
 
-前两条命令应成功；业务选项示例目前会以非零状态退出，提示尚未实现。可使用替代处理函数检查分发过程，避免运行 workflow。记录检查命令和实际结果；测试与依赖的规模应与代码相称。
+测试覆盖参数解析与命令输出，无需调用模型。记录检查命令和实际结果；测试与依赖的规模应与改动相称。
 
 ## 提交 Pull Request
 
