@@ -88,6 +88,41 @@ pub(super) fn render_expanded(
 }
 
 impl ClientShellState {
+    pub(super) fn reveal_agent_workspace(&mut self, endpoint_id: &ClientEndpointId, pane_id: &str) {
+        self.collapsed_endpoints.remove(endpoint_id);
+        let worktree_key = self
+            .endpoints
+            .iter()
+            .find(|endpoint| &endpoint.endpoint_id == endpoint_id)
+            .and_then(|endpoint| endpoint.snapshot.as_deref())
+            .and_then(|snapshot| {
+                let agent = snapshot
+                    .agents
+                    .iter()
+                    .find(|agent| agent.pane_id == pane_id)?;
+                let workspace = snapshot
+                    .workspaces
+                    .iter()
+                    .find(|workspace| workspace.workspace_id == agent.workspace_id)?;
+                workspace
+                    .worktree
+                    .as_ref()
+                    .filter(|worktree| worktree.is_linked_worktree)
+                    .map(|worktree| worktree.key.clone())
+            });
+        let Some(worktree_key) = worktree_key else {
+            return;
+        };
+        if endpoint_id.is_local() {
+            self.collapsed_groups.remove(&worktree_key);
+        } else {
+            self.remote_collapsed_groups
+                .entry(endpoint_id.clone())
+                .or_default()
+                .remove(&worktree_key);
+        }
+    }
+
     pub(super) fn reveal_endpoint_agent(
         &mut self,
         endpoint_id: &ClientEndpointId,
@@ -95,6 +130,7 @@ impl ClientShellState {
         body_height: u16,
     ) {
         if self.hits.agent_body.is_empty() {
+            self.reveal_agent_workspace(endpoint_id, pane_id);
             if let Some(row) = super::render::sidebar_fore_rsi::endpoint_navigation_row_for_pane(
                 &self.endpoints,
                 &self.collapsed_endpoints,

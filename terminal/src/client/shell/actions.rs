@@ -926,6 +926,8 @@ impl ClientShellState {
                     .any(|(_, visible_pane_id)| visible_pane_id == &pane_id)
                 {
                     if self.hits.agent_body.is_empty() {
+                        let endpoint_id = self.active_endpoint_id.clone();
+                        self.reveal_agent_workspace(&endpoint_id, &pane_id);
                         let scroll = self
                             .snapshot
                             .as_deref()
