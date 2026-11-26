@@ -5,7 +5,14 @@
 
 from typing import TYPE_CHECKING
 
-from langgraph.graph import StateGraph
+from langgraph.graph import START, StateGraph, END
+
+from fore_rsi.rsi_workflows.custom_workflows.default.agents.explorer.agent import (
+    ExplorerAgent,
+)
+from fore_rsi.rsi_workflows.custom_workflows.default.agents.checker.agent import (
+    CheckerAgent,
+)
 
 if TYPE_CHECKING:
     from ..workflow import DefaultWorkflow
@@ -53,4 +60,17 @@ def build_exploration_subflow(workflow: "DefaultWorkflow") -> StateGraph:
 
     retire --> retire_workgroup --> exit_node --> END
     """
-    return StateGraph(dict)
+    graph = StateGraph(dict)
+
+    # Agent methods send prompts; the subflow owns routing.
+    graph.add_node(
+        "exploration",
+        ExplorerAgent.exploration,
+    )
+
+    graph.add_node(
+        "check_exploration",
+        CheckerAgent.check_exploration,
+    )
+
+    return graph
