@@ -34,7 +34,7 @@ class BaseWorkflow(ABC):
         self.session_directory = session_directory
         self.task_revision_queue: asyncio.Queue[TaskRevision] = asyncio.Queue()
         self.exploration_pool = ExplorationPool()
-        self.accepting_tasks = True
+        self.task_submissions_closed = False
         self.subflow_tasks = asyncio.TaskGroup()
         self.tool_mcp_host = ToolMcpHost()
         self.agent_scheduler = AgentScheduler(
@@ -67,8 +67,8 @@ class BaseWorkflow(ABC):
         ...
 
     async def close_workflow(self) -> None:
-        """Close task intake and let listeners drain the accepted revisions."""
-        self.accepting_tasks = False
+        """Stop new submissions and let listeners finish processing queued revisions."""
+        self.task_submissions_closed = True
         self.task_revision_queue.shutdown()
 
     async def create_workgroup(

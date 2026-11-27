@@ -11,11 +11,7 @@ from typing import ClassVar
 from fore_rsi.config import WorkflowConfig
 from fore_rsi.rsi_workflows.base_agent import AgentState, BaseAgent
 from fore_rsi.rsi_workflows.base_workflow import BaseWorkflow
-from fore_rsi.rsi_workflows.workflow_runtimes.task import (
-    Task,
-    TaskRevision,
-    TaskSubmission,
-)
+from fore_rsi.rsi_workflows.workflow_runtimes.task import Task, TaskRevision
 
 from .agents.checker import CheckerAgent
 from .agents.coordinator import CoordinatorAgent
@@ -44,7 +40,7 @@ class DefaultWorkflow(BaseWorkflow):
     }
 
     def __init__(self, config: WorkflowConfig, session_directory: Path) -> None:
-        """Create task intake state without starting native Agent execution."""
+        """Prepare the session's task history without starting any agents."""
         super().__init__(config, session_directory)
         self.task = Task(session_directory)
         self.watchdog_task: asyncio.Task[None] | None = None
@@ -79,16 +75,6 @@ class DefaultWorkflow(BaseWorkflow):
         self.subflow_tasks.create_task(self.receive_task_updates())
         await exploration
         await experiments
-
-    async def submit_task(self, submission: TaskSubmission) -> TaskRevision:
-        """Return the accepted revision and notify listeners even when the submission is unchanged."""
-        async with self.agent_scheduler.role_quota_update(submission.agent_team.roles):
-            if not self.accepting_tasks:
-                raise ValueError("Task intake is closed.")
-            task_revision = self.task.publish_task(submission)
-        # Receiving a revision can start new agents, so its role quotas must be in effect first.
-        self.task_revision_queue.put_nowait(task_revision)
-        return task_revision
 
     async def receive_task(
         self,
@@ -178,7 +164,7 @@ class DefaultWorkflow(BaseWorkflow):
                 agent.add_to_inbox(message)
 
     async def close_workflow(self) -> None:
-        """Stop watchdog supervision and close task intake when the workflow exits."""
+        """Stop the watchdog and reject further task submissions when the workflow exits."""
         if self.watchdog_task is not None:
             self.watchdog_task.cancel()
         await super().close_workflow()

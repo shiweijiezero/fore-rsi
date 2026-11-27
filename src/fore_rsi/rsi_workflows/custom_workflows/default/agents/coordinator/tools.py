@@ -3,17 +3,20 @@
 
 """Tool implementations for the default workflow's Coordinator."""
 
-from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskRevision, TaskSubmission
+from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskSubmission
+
+if TYPE_CHECKING:
+    from fore_rsi.rsi_workflows.custom_workflows.default.workflow import DefaultWorkflow
 
 
 async def submit_task(
     task_submission: TaskSubmission,
     *,
-    submit_to_workflow: Callable[[TaskSubmission], Awaitable[TaskRevision]],
+    workflow: "DefaultWorkflow",
 ) -> dict[str, int]:
     """Convert the user's requirements into a complete and accurate task declaration for the team.
 
@@ -27,7 +30,13 @@ async def submit_task(
     An unchanged declaration returns the same revision number and still signals a submission to the workflow.
     """
     try:
-        task_revision = await submit_to_workflow(task_submission)
+        async with workflow.agent_scheduler.role_quota_update(task_submission.agent_team.roles):
+            if workflow.task_submissions_closed:
+                raise ValueError("This workflow is no longer accepting task submissions.")
+            task_revision = workflow.task.publish_task(task_submission)
     except ValueError as error:
         raise ToolError(f"Task declaration was not accepted: {error}") from error
+
+    # A listener may start agents as soon as it receives the revision, so apply quotas first.
+    workflow.task_revision_queue.put_nowait(task_revision)
     return {"revision_number": task_revision.revision_number}
