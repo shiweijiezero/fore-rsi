@@ -27,9 +27,7 @@ async def prepare_progress_runtime(session_name: str) -> None:
 
     origin = distribution("fore-rsi").read_text("direct_url.json")
     editable = origin and json.loads(origin).get("dir_info", {}).get("editable")
-    # UI libraries inspect the process cwd on import. The viewer reads a session by
-    # name; it doesn't need directory access to the project its workspace represents.
-    bootstrap = "import os, sys\nos.chdir(os.path.dirname(sys.argv[0]))\n"
+    bootstrap = "import sys\n"
     target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     with NamedTemporaryFile(dir=target.parent, delete_on_close=False) as staged:
         with ZipFile(staged, "w") as archive:
