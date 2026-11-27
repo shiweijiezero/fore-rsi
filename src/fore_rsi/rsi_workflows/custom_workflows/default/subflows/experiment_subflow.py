@@ -5,20 +5,11 @@
 
 from typing import TYPE_CHECKING
 
-from fore_rsi.rsi_workflows.types import ExplorationPool
-from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskRevision
-
 if TYPE_CHECKING:
     from ..workflow import DefaultWorkflow
 
 
-async def run_experiment_subflow(
-    workflow: "DefaultWorkflow",
-    workspace_id: str,
-    task_revision: TaskRevision,
-    *,
-    exploration_pool: ExplorationPool,
-) -> None:
+async def run_experiment_subflow(workflow: "DefaultWorkflow", workspace_id: str) -> None:
     """Record each experiment's command and result on the corresponding exploration entry.
 
     START --> route_experiment_stage
@@ -29,9 +20,15 @@ async def run_experiment_subflow(
                 |                                     +--[experimenter_2] --> route_experiment_stage[select_resources]
                 +--[select_resources] ------> lock_select_resources
                 |                            --> select_experimenter_resources
-                |                            --> wait_for_settle_and_tool_subflow[A=unlock_select_resources,B=select_experimenter_resources,C=abort_resource_selection]
+                |                            --> wait_for_settle --> tool_submission_status
+                |                                +--[submitted] -------> unlock_select_resources
+                |                                +--[not_submitted] ---> select_experimenter_resources
+                |                                +--[exceed_limit_try] -> abort_resource_selection
                 +--[experiment] ------------> select_experimenter (blocking with quota) --> experiment (running)
-                                             --> wait_for_settle_and_tool_subflow[A=publish_result,B=experiment,C=exit_node]
+                                             --> wait_for_settle --> tool_submission_status
+                                                 +--[submitted] -------> publish_result
+                                                 +--[not_submitted] ---> experiment
+                                                 +--[exceed_limit_try] -> exit_node
 
     unlock_select_resources --> END
     abort_resource_selection (release the selection lock without an assignment) --> exit_node

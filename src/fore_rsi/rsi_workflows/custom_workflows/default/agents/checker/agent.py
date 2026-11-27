@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, cast
 from fore_rsi.config import AgentConfig
 from fore_rsi.rsi_workflows.agent_runtimes.tool_mcp import register_agent_tool
 from fore_rsi.rsi_workflows.base_agent import BaseAgent, ExpectedToolCalls
-from fore_rsi.rsi_workflows.workgroup import Workgroup
+from fore_rsi.rsi_workflows.workflow_runtimes.workgroup import Workgroup
 from fore_rsi.utils.prompt_renderer import merge_prompts, render_prompt
 
 from .tools import ExplorationCheck, submit_exploration_check

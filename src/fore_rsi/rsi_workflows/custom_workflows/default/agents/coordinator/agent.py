@@ -12,7 +12,7 @@ from fore_rsi.rsi_workflows.base_agent import BaseAgent, ExpectedToolCalls
 from fore_rsi.rsi_workflows.custom_workflows.default.agents.coordinator.tools import (
     submit_task,
 )
-from fore_rsi.rsi_workflows.workgroup import Workgroup
+from fore_rsi.rsi_workflows.workflow_runtimes.workgroup import Workgroup
 from fore_rsi.utils.prompt_renderer import merge_prompts, render_prompt
 
 if TYPE_CHECKING:

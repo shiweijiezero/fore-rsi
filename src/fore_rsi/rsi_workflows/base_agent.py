@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 from fore_rsi.config import AgentConfig
 from fore_rsi.rsi_workflows.agent_runtimes import AgentTool, create_agent_runtime
 from fore_rsi.rsi_workflows.agent_runtimes.base_runtime import MessageDeliveryMode
-from fore_rsi.rsi_workflows.workgroup import Workgroup
+from fore_rsi.rsi_workflows.workflow_runtimes.workgroup import Workgroup
 
 if TYPE_CHECKING:
     from fore_rsi.rsi_workflows.base_workflow import BaseWorkflow
@@ -81,6 +81,7 @@ class BaseAgent:
         """Create the member's unstarted runtime with the tools selected by its role."""
         self.agent_name = agent_name
         self.workgroup = workgroup
+        self.agent_scheduler = workflow.agent_scheduler
         self.system_prompt: str | None = None
         self.state = AgentState.READY
         self.inbox: list[tuple[datetime, str]] = []
@@ -91,6 +92,14 @@ class BaseAgent:
             tool_mcp_host=workflow.tool_mcp_host,
             tools=[self.observe_tool_submission(tool) for tool in tools],
         )
+
+    async def close(self) -> None:
+        """Retire the agent and release its scheduler slot even if its runtime fails to close."""
+        self.state = AgentState.RETIRED
+        try:
+            await self.agent_runtime.close()
+        finally:
+            await self.agent_scheduler.release(self)
 
     def add_to_inbox(self, message: str) -> None:
         """Timestamp an incoming message for the next prompt without starting a turn."""

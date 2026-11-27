@@ -4,7 +4,7 @@
 """Agent role quotas, creation admission, execution queues, and active slots."""
 
 import asyncio
-from collections import deque
+from collections import Counter, deque
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -16,8 +16,10 @@ from pydantic import BaseModel, NonNegativeInt
 from fore_rsi.config import AgentConfig, ReasoningEffort
 from fore_rsi.rsi_workflows.base_agent import AgentState, BaseAgent
 from fore_rsi.rsi_workflows.types import RequiredText
+
 if TYPE_CHECKING:
     from fore_rsi.rsi_workflows.base_workflow import BaseWorkflow
+    from fore_rsi.rsi_workflows.workflow_runtimes.workgroup import Workgroup
 
 
 class AgentAllocation(BaseModel):
@@ -36,16 +38,10 @@ class SchedulingPriority(IntEnum):
     LOW = 2
 
 
-@dataclass
+@dataclass(eq=False)
 class AgentCreationRequest:
-    """All information required to create one Agent after a quota becomes available."""
+    """One queue entry, distinct from other requests for the same quota and priority."""
 
-    agent_name: str
-    workgroup_name: str | None
-    agent_config: AgentConfig
-    workflow: "BaseWorkflow"
-    workspace_id: str
-    is_entry_agent: bool
     priority: SchedulingPriority
     quota_key: tuple[type[BaseAgent], str | None, str | None]
 
@@ -59,6 +55,7 @@ class AgentScheduler:
     ) -> None:
         """Initialize role mappings, quota limits, queues, and active Agents."""
         self.role_classes = dict(role_classes or {})
+        self.agent_name_counters: Counter[str] = Counter()
         # Every registered role starts with one slot for the native default model and effort.
         self.quotas: dict[
             tuple[type[BaseAgent], str | None, str | None],
@@ -118,30 +115,16 @@ class AgentScheduler:
         self,
         *,
         agent_class: type[AgentT],
-        agent_name: str,
-        workgroup_name: str | None,
+        workgroup: "Workgroup",
         agent_config: AgentConfig,
         workflow: "BaseWorkflow",
         workspace_id: str,
         is_entry_agent: bool,
         priority: SchedulingPriority = SchedulingPriority.LOW,
     ) -> AgentT:
-        """Wait for quota and return the registered agent once its runtime is ready."""
-        quota_key = (
-            agent_class,
-            agent_config.model,
-            agent_config.effort,
-        )
-        creation_request = AgentCreationRequest(
-            agent_name=agent_name,
-            workgroup_name=workgroup_name,
-            agent_config=agent_config,
-            workflow=workflow,
-            workspace_id=workspace_id,
-            is_entry_agent=is_entry_agent,
-            priority=priority,
-            quota_key=quota_key,
-        )
+        """Wait for quota and return a ready agent in the supplied workgroup."""
+        quota_key = (agent_class, agent_config.model, agent_config.effort)
+        creation_request = AgentCreationRequest(priority=priority, quota_key=quota_key)
 
         try:
             # Admission happens before Agent construction and Native runtime creation.
@@ -157,27 +140,12 @@ class AgentScheduler:
                     is creation_request
                 )
                 self.priority_queues[priority].remove(creation_request)
-                # The slot is reserved before constructing and registering the Agent.
-                workgroup = (
-                    creation_request.workflow.workgroups.get(
-                        creation_request.workgroup_name
-                    )
-                    if creation_request.workgroup_name is not None
-                    else None
-                )
-                if workgroup is None:
-                    workgroup = await creation_request.workflow.create_workgroup(
-                        workspace_id=creation_request.workspace_id,
-                        workgroup_name=creation_request.workgroup_name,
-                    )
-                agent = agent_class(
-                    creation_request.agent_name,
-                    workgroup,
-                    creation_request.agent_config,
-                    workflow=creation_request.workflow,
-                )
-                workgroup.agents[creation_request.agent_name] = agent
-                self.active_agents[agent] = creation_request.quota_key
+                role_prefix = agent_class.role_name.lower()
+                self.agent_name_counters[role_prefix] += 1
+                agent_name = f"{role_prefix}-{self.agent_name_counters[role_prefix]}"
+                agent = agent_class(agent_name, workgroup, agent_config, workflow=workflow)
+                workgroup.agents[agent_name] = agent
+                self.active_agents[agent] = quota_key
         except BaseException:
             # A cancelled or rejected request must not block later requests in the same queue.
             await self.cancel_agent_creation(creation_request)
@@ -185,13 +153,13 @@ class AgentScheduler:
 
         try:
             await agent.agent_runtime.start(
-                creation_request.workspace_id,
-                is_entry=creation_request.is_entry_agent,
+                workspace_id,
+                is_entry=is_entry_agent,
                 system_prompt=agent.system_prompt,
             )
         except BaseException:
             self.active_agents.pop(agent, None)
-            agent.workgroup.agents.pop(creation_request.agent_name, None)
+            workgroup.agents.pop(agent_name, None)
             agent.state = AgentState.FAILED
             async with self.scheduler_condition:
                 self.scheduler_condition.notify_all()

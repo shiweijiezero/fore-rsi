@@ -59,8 +59,7 @@ class DefaultWorkflow(BaseWorkflow):
         """
         coordinator = await self.agent_scheduler.create_agent(
             agent_class=CoordinatorAgent,
-            agent_name=self.next_agent_name(CoordinatorAgent.role_name),
-            workgroup_name=self.global_workgroup.workgroup_name,
+            workgroup=self.workgroups.global_workgroup,
             agent_config=replace(
                 self.default_agent_config,
                 model=self.config.entry_model,
@@ -70,8 +69,8 @@ class DefaultWorkflow(BaseWorkflow):
             workspace_id=workspace_id,
             is_entry_agent=True,
         )
-        task_revision = await self.receive_task(coordinator, task_file=self.config.task)
-        exploration, experiments = self.init_subflows(workspace_id, task_revision)
+        await self.receive_task(coordinator, task_file=self.config.task)
+        exploration, experiments = self.init_subflows(workspace_id)
         self.subflow_tasks.create_task(self.receive_task_updates())
         await exploration
         await experiments
@@ -81,8 +80,8 @@ class DefaultWorkflow(BaseWorkflow):
         coordinator: CoordinatorAgent,
         *,
         task_file: Path | None = None,
-    ) -> TaskRevision:
-        """Wait for the first accepted revision, prompting the Coordinator when given a task file.
+    ) -> None:
+        """Wait for the first submission, asking the Coordinator to parse the task file if supplied.
 
         receive_task
               +--[task_file] --> parse_task --> wait_for_settle --> tool_submission_status
@@ -93,7 +92,7 @@ class DefaultWorkflow(BaseWorkflow):
               +--[not_submitted] ----> parse_task
               +--[exceed_limit_try] -> raise RuntimeError
 
-        wait_for_task_revision --> return TaskRevision
+        wait_for_task_revision --> return on first submission
         """
         if task_file is not None:
             status = "not_submitted"
@@ -107,32 +106,20 @@ class DefaultWorkflow(BaseWorkflow):
                     f"after {self.config.max_attempts} attempts."
                 )
 
-        return await self.task_revision_queue.get()
+        await self.task_revision_queue.get()
 
-    def init_subflows(
-        self, workspace_id: str, task_revision: TaskRevision
-    ) -> tuple[asyncio.Task[None], asyncio.Task[None]]:
+    def init_subflows(self, workspace_id: str) -> tuple[asyncio.Task[None], asyncio.Task[None]]:
         """Start the team and return the two tasks whose completion ends the workflow.
 
         init_subflows
-              +--> run_exploration_subflow[exploration_pool]
-              +--> run_experiment_subflow[exploration_pool]
+              +--> run_exploration_subflow
+              +--> run_experiment_subflow
               +--> run_watchdog_subflow
         """
         tasks = self.subflow_tasks
-        exploration = tasks.create_task(
-            run_exploration_subflow(
-                self, workspace_id, task_revision,
-                exploration_pool=self.exploration_pool,
-            )
-        )
-        experiments = tasks.create_task(
-            run_experiment_subflow(
-                self, workspace_id, task_revision,
-                exploration_pool=self.exploration_pool,
-            )
-        )
-        self.watchdog_task = tasks.create_task(run_watchdog_subflow(self, workspace_id, task_revision))
+        exploration = tasks.create_task(run_exploration_subflow(self, workspace_id))
+        experiments = tasks.create_task(run_experiment_subflow(self, workspace_id))
+        self.watchdog_task = tasks.create_task(run_watchdog_subflow(self, workspace_id))
         return exploration, experiments
 
     async def receive_task_updates(self) -> None:
@@ -156,7 +143,7 @@ class DefaultWorkflow(BaseWorkflow):
             f"Read {task_revision.revision_file_path.resolve()} for the current requirements."
         )
         # Sending to a running agent yields control; take the recipient list before membership can change.
-        members = [agent for group in self.workgroups.values() for agent in group.agents.values()]
+        members = [agent for workgroup in self.workgroups.values() for agent in workgroup.agents.values()]
         for agent in members:
             if agent.state == AgentState.RUNNING:
                 await agent.send_message(message, mode="steer")
