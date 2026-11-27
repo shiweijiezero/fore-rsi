@@ -1,0 +1,20 @@
+{#
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
+#}
+
+## Exploration review
+
+Review the following candidate for readiness to enter the experiment stage.
+
+- Current candidate: {{ candidate }}
+- Code or proposal path: `{{ code_path }}`
+{% if parent_node is not none %}
+- Parent node: {{ parent_node }}
+{% else %}
+- Parent node: none; this is a baseline candidate.
+{% endif %}
+
+- Inspect the candidate's code or proposal and assess how it addresses the claimed bottleneck. Consider expected benefit, implementation complexity, and resource cost.
+- Check correctness, task constraints, and relevant regressions. For a proposal, assess whether the procedure, baseline, and evaluation criteria are concrete enough to execute. Verify that the supplied artifacts and instructions are sufficient to reproduce the planned experiment.
+- Distinguish readiness to test from demonstrated improvement. State the checks performed, blocking issues, and assumptions the experiment should test. Identify any missing candidate artifacts needed to run the experiment.
