@@ -14,6 +14,7 @@ from typing import ClassVar
 from fore_rsi.config import AgentConfig, WorkflowConfig
 from fore_rsi.rsi_workflows.agent_runtimes.tool_mcp import ToolMcpHost
 from fore_rsi.rsi_workflows.base_agent import AgentState, BaseAgent
+from fore_rsi.rsi_workflows.types import ExplorationPool
 from fore_rsi.rsi_workflows.workflow_runtimes.agent_scheduler import AgentScheduler
 from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskRevision
 from fore_rsi.rsi_workflows.workgroup import Workgroup
@@ -32,8 +33,7 @@ class BaseWorkflow(ABC):
         self.default_agent_config = AgentConfig(harness=config.harness_or_default)
         self.session_directory = session_directory
         self.task_revision_queue: asyncio.Queue[TaskRevision] = asyncio.Queue()
-        self.experiment_pool: asyncio.Queue[str] = asyncio.Queue()
-        self.experiment_results: asyncio.Queue[str] = asyncio.Queue()
+        self.exploration_pool = ExplorationPool()
         self.accepting_tasks = True
         self.subflow_tasks = asyncio.TaskGroup()
         self.tool_mcp_host = ToolMcpHost()
@@ -67,7 +67,7 @@ class BaseWorkflow(ABC):
         ...
 
     async def close_workflow(self) -> None:
-        """Stop accepting submissions so the revision listener can drain and exit."""
+        """Close task intake and let listeners drain the accepted revisions."""
         self.accepting_tasks = False
         self.task_revision_queue.shutdown()
 

@@ -50,7 +50,17 @@ class DefaultWorkflow(BaseWorkflow):
         self.watchdog_task: asyncio.Task[None] | None = None
 
     async def run_workflow(self, workspace_id: str) -> None:
-        """Start the Coordinator and wait for the first accepted task before running the subflows."""
+        """Start the team on the first submission and deliver later revisions while it runs.
+
+        START --> create_agent[Coordinator] --> receive_task
+
+        receive_task
+              +--[exceed_limit_try] ---------> raise RuntimeError
+              +--[first accepted submission]--+--> init_subflows
+                                              +--> receive_task_updates
+
+        [exploration and experiments finished] --> return
+        """
         coordinator = await self.agent_scheduler.create_agent(
             agent_class=CoordinatorAgent,
             agent_name=self.next_agent_name(CoordinatorAgent.role_name),
@@ -69,22 +79,6 @@ class DefaultWorkflow(BaseWorkflow):
         self.subflow_tasks.create_task(self.receive_task_updates())
         await exploration
         await experiments
-
-    def init_subflows(
-        self, workspace_id: str, task_revision: TaskRevision
-    ) -> tuple[asyncio.Task[None], asyncio.Task[None]]:
-        """Start the team and return the two tasks whose completion ends the workflow."""
-        tasks = self.subflow_tasks
-        exploration = tasks.create_task(run_exploration_subflow(self, workspace_id, task_revision))
-        experiments = tasks.create_task(run_experiment_subflow(self, workspace_id, task_revision))
-        self.watchdog_task = tasks.create_task(run_watchdog_subflow(self, workspace_id, task_revision))
-        return exploration, experiments
-
-    async def close_workflow(self) -> None:
-        """Stop watchdog supervision and close task intake when the workflow exits."""
-        if self.watchdog_task is not None:
-            self.watchdog_task.cancel()
-        await super().close_workflow()
 
     async def submit_task(self, submission: TaskSubmission) -> TaskRevision:
         """Return the accepted revision and notify listeners even when the submission is unchanged."""
@@ -129,8 +123,39 @@ class DefaultWorkflow(BaseWorkflow):
 
         return await self.task_revision_queue.get()
 
+    def init_subflows(
+        self, workspace_id: str, task_revision: TaskRevision
+    ) -> tuple[asyncio.Task[None], asyncio.Task[None]]:
+        """Start the team and return the two tasks whose completion ends the workflow.
+
+        init_subflows
+              +--> run_exploration_subflow[exploration_pool]
+              +--> run_experiment_subflow[exploration_pool]
+              +--> run_watchdog_subflow
+        """
+        tasks = self.subflow_tasks
+        exploration = tasks.create_task(
+            run_exploration_subflow(
+                self, workspace_id, task_revision,
+                exploration_pool=self.exploration_pool,
+            )
+        )
+        experiments = tasks.create_task(
+            run_experiment_subflow(
+                self, workspace_id, task_revision,
+                exploration_pool=self.exploration_pool,
+            )
+        )
+        self.watchdog_task = tasks.create_task(run_watchdog_subflow(self, workspace_id, task_revision))
+        return exploration, experiments
+
     async def receive_task_updates(self) -> None:
-        """Notify agents on each accepted submission until the revision queue closes and drains."""
+        """Notify agents on each accepted submission until the revision queue closes and drains.
+
+        task_revision_queue.get
+              +--[accepted] --> update_task_to_agents --> task_revision_queue.get
+              +--[queue closed and empty] --> return
+        """
         while True:
             try:
                 task_revision = await self.task_revision_queue.get()
@@ -151,3 +176,9 @@ class DefaultWorkflow(BaseWorkflow):
                 await agent.send_message(message, mode="steer")
             elif agent.state not in (AgentState.RETIRED, AgentState.FAILED):
                 agent.add_to_inbox(message)
+
+    async def close_workflow(self) -> None:
+        """Stop watchdog supervision and close task intake when the workflow exits."""
+        if self.watchdog_task is not None:
+            self.watchdog_task.cancel()
+        await super().close_workflow()

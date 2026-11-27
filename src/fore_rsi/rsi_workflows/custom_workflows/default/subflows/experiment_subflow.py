@@ -5,6 +5,7 @@
 
 from typing import TYPE_CHECKING
 
+from fore_rsi.rsi_workflows.types import ExplorationPool
 from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskRevision
 
 if TYPE_CHECKING:
@@ -15,8 +16,10 @@ async def run_experiment_subflow(
     workflow: "DefaultWorkflow",
     workspace_id: str,
     task_revision: TaskRevision,
+    *,
+    exploration_pool: ExplorationPool,
 ) -> None:
-    """Run the submitted proposals and send each experiment result back to exploration.
+    """Record each experiment's command and result on the corresponding exploration entry.
 
     START --> route_experiment_stage
                 +--[initialize_experimenter] --> create_experimenter_workgroup
@@ -33,9 +36,6 @@ async def run_experiment_subflow(
     unlock_select_resources --> END
     abort_resource_selection (release the selection lock without an assignment) --> exit_node
     exit_node --> END
-    publish_result --> publish_experiment_result
+    publish_result --> exploration_pool
     """
-    try:
-        raise NotImplementedError("The experiment subflow is not implemented.")
-    finally:
-        workflow.experiment_results.shutdown()
+    raise NotImplementedError("The experiment subflow is not implemented.")
