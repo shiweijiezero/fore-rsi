@@ -1,19 +1,27 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
 
-"""Experiment subflow graph for the default workflow."""
+"""Experiment execution and result delivery for the default workflow."""
 
-from functools import partial
+import asyncio
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
-from langgraph.graph import START, StateGraph
+from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskRevision
 
 if TYPE_CHECKING:
     from ..workflow import DefaultWorkflow
 
 
-def build_experiment_subflow(workflow: "DefaultWorkflow") -> StateGraph:
-    """Build the Experiment subflow graph for the default workflow.
+async def run_experiment_subflow(
+    workflow: "DefaultWorkflow",
+    workspace_id: str,
+    task_revision: TaskRevision,
+    *,
+    experiment_pool: asyncio.Queue[str],
+    publish_experiment_result: Callable[[str], Awaitable[None]],
+) -> None:
+    """Run the submitted proposals and send each experiment result back to exploration.
 
     START --> route_experiment_stage
                 +--[initialize_experimenter] --> create_experimenter_workgroup
@@ -27,35 +35,9 @@ def build_experiment_subflow(workflow: "DefaultWorkflow") -> StateGraph:
                 +--[experiment] ------------> select_experimenter (blocking with quota) --> experiment (running)
                                              --> wait_for_settle_and_tool_subflow[A=publish_result,B=experiment,C=exit_node]
 
-
     unlock_select_resources --> END
     abort_resource_selection (release the selection lock without an assignment) --> exit_node
     exit_node --> END
-    publish_result --> queue_exploration_feedback --[Command.PARENT]--> route_workflow_stage[exploration]
+    publish_result --> publish_experiment_result
     """
-    graph = StateGraph(dict)
-    graph.add_node(
-        "create_experimenter_workgroup",
-        partial(
-            lambda state, *, name: {
-                **state,
-                "experimenter_workgroup_name": (
-                    workflow.workgroups.get(name) or workflow.create_workgroup(name)
-                ).workgroup_name,
-            },
-            name="experimenters",
-        ),
-    )
-    graph.add_node("route_experiment_stage", lambda _: None)
-    graph.add_edge(START, "route_experiment_stage")
-    graph.add_conditional_edges(
-        "route_experiment_stage",
-        lambda state: state.get("next_experiment_stage"),
-        {
-            "initialize_experimenter": "create_experimenter_workgroup",
-            "select_resources": "lock_select_resources",
-            "experiment": "select_experimenter",
-        },
-    )
-    graph.add_edge("create_experimenter_workgroup", "study_experiment")
-    return graph
+    raise NotImplementedError("The experiment subflow is not implemented.")

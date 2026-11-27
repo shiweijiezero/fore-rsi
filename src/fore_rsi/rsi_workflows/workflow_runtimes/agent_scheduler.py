@@ -5,7 +5,8 @@
 
 import asyncio
 from collections import deque
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import TYPE_CHECKING, Literal
@@ -39,7 +40,6 @@ class SchedulingPriority(IntEnum):
 class AgentCreationRequest:
     """All information required to create one Agent after a quota becomes available."""
 
-    agent_class: type[BaseAgent]
     agent_name: str
     workgroup_name: str | None
     agent_config: AgentConfig
@@ -77,11 +77,12 @@ class AgentScheduler:
         ] = {}
         self.scheduler_condition = asyncio.Condition()
 
-    async def set_role_quotas(
+    @asynccontextmanager
+    async def role_quota_update(
         self,
         role_allocations: Mapping[str, Sequence[AgentAllocation]],
-    ) -> None:
-        """Translate role allocations and apply them to the Scheduler."""
+    ) -> AsyncIterator[None]:
+        """Validate allocations before publication and install them only if publication succeeds."""
         for role_name in role_allocations:
             if role_name not in self.role_classes:
                 raise ValueError(
@@ -105,6 +106,7 @@ class AgentScheduler:
                 raise ValueError('Agent quota must be a nonnegative integer or "unlimited".')
 
         async with self.scheduler_condition:
+            yield
             # Explicit task allocations override defaults; omitted combinations return to one slot.
             self.quotas.update(scheduler_quotas)
             for quota_key in tuple(self.quotas):
@@ -112,33 +114,25 @@ class AgentScheduler:
                     self.quotas[quota_key] = 1
             self.scheduler_condition.notify_all()
 
-    async def update_agent_scheduler(
-        self, workflow_state: Mapping[str, object]
-    ) -> None:
-        """Apply the published task's role quotas without replacing the state used for routing."""
-        task_submission = workflow_state["task_submission"]
-        await self.set_role_quotas(task_submission.agent_team.roles)
-
-    async def create_agent(
+    async def create_agent[AgentT: BaseAgent](
         self,
         *,
-        agent_class: type[BaseAgent],
+        agent_class: type[AgentT],
         agent_name: str,
         workgroup_name: str | None,
         agent_config: AgentConfig,
         workflow: "BaseWorkflow",
         workspace_id: str,
         is_entry_agent: bool,
-        priority: SchedulingPriority,
-    ) -> dict[str, object]:
-        """Wait for quota, then create, register, and start one Agent."""
+        priority: SchedulingPriority = SchedulingPriority.LOW,
+    ) -> AgentT:
+        """Wait for quota and return the registered agent once its runtime is ready."""
         quota_key = (
             agent_class,
             agent_config.model,
             agent_config.effort,
         )
         creation_request = AgentCreationRequest(
-            agent_class=agent_class,
             agent_name=agent_name,
             workgroup_name=workgroup_name,
             agent_config=agent_config,
@@ -152,6 +146,9 @@ class AgentScheduler:
         try:
             # Admission happens before Agent construction and Native runtime creation.
             async with self.scheduler_condition:
+                # The entry agent can select a model and effort before the first task supplies quotas.
+                if is_entry_agent and quota_key not in self.quotas:
+                    self.quotas[quota_key] = self.quotas[(agent_class, None, None)]
                 self.priority_queues[priority].append(creation_request)
                 self.scheduler_condition.notify_all()
                 # wait_for rechecks the predicate after each quota or queue change.
@@ -169,10 +166,11 @@ class AgentScheduler:
                     else None
                 )
                 if workgroup is None:
-                    workgroup = creation_request.workflow.create_workgroup(
-                        creation_request.workgroup_name
+                    workgroup = await creation_request.workflow.create_workgroup(
+                        workspace_id=creation_request.workspace_id,
+                        workgroup_name=creation_request.workgroup_name,
                     )
-                agent = creation_request.agent_class(
+                agent = agent_class(
                     creation_request.agent_name,
                     workgroup,
                     creation_request.agent_config,
@@ -180,8 +178,8 @@ class AgentScheduler:
                 )
                 workgroup.agents[creation_request.agent_name] = agent
                 self.active_agents[agent] = creation_request.quota_key
-        except asyncio.CancelledError:
-            # A cancelled waiter must leave the queue so it cannot consume a later slot.
+        except BaseException:
+            # A cancelled or rejected request must not block later requests in the same queue.
             await self.cancel_agent_creation(creation_request)
             raise
 
@@ -199,11 +197,7 @@ class AgentScheduler:
                 self.scheduler_condition.notify_all()
             raise
 
-        return {
-            "agent": agent,
-            "agent_name": creation_request.agent_name,
-            "workgroup_name": agent.workgroup.workgroup_name,
-        }
+        return agent
 
     async def cancel_agent_creation(
         self, creation_request: AgentCreationRequest

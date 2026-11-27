@@ -3,7 +3,6 @@
 
 """Accept task submissions from the Coordinator and keep a revision history for each workflow session."""
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -74,30 +73,14 @@ class Task:
         """Return the latest revision submitted during this Workflow run."""
         return self.task_revisions[-1] if self.task_revisions else None
 
-    def publish_task(self, workflow_state: Mapping[str, object]) -> dict[str, object]:
-        """Publish the submitted task and return the workflow state with its revision metadata."""
-        task_submission = workflow_state["task_submission"]
-        current_task = self.current_task
-        # Reuse the revision on replay so both the file and the initialization decision stay the same.
-        if current_task is not None and current_task.task_submission == task_submission:
-            task_revision = current_task
-        else:
-            next_revision_number = (
-                current_task.revision_number + 1 if current_task is not None else 1
-            )
-            task_revision = self.write_task_revision(
-                next_revision_number,
-                task_submission,
-            )
-            self.task_revisions.append(task_revision)
-
-        return {
-            **workflow_state,
-            "task_revision": task_revision,
-            "is_new_task_revision": task_revision is not current_task,
-            "previous_task_revisions": self.task_revisions[:-1],
-            "is_first_task_submission": task_revision.revision_number == 1,
-        }
+    def publish_task(self, task_submission: TaskSubmission) -> TaskRevision:
+        """Persist a changed submission, or return the current revision on an identical replay."""
+        current = self.current_task
+        if current is not None and current.task_submission == task_submission:
+            return current
+        revision = self.write_task_revision(len(self.task_revisions) + 1, task_submission)
+        self.task_revisions.append(revision)
+        return revision
 
     def write_task_revision(
         self, revision_number: int, task_submission: TaskSubmission

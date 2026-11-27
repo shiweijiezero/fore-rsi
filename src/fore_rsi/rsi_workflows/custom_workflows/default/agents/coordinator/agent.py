@@ -3,18 +3,14 @@
 
 """Coordinator role for the default collaboration workflow."""
 
-from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from fore_rsi.config import AgentConfig
 from fore_rsi.rsi_workflows.agent_runtimes.tool_mcp import register_agent_tool
 from fore_rsi.rsi_workflows.base_agent import BaseAgent, ExpectedToolCalls
 from fore_rsi.rsi_workflows.custom_workflows.default.agents.coordinator.tools import (
     submit_task,
-)
-from fore_rsi.rsi_workflows.custom_workflows.default.subflows.general import (
-    enqueue_task_submission,
 )
 from fore_rsi.rsi_workflows.workgroup import Workgroup
 from fore_rsi.utils.prompt_renderer import merge_prompts, render_prompt
@@ -52,7 +48,7 @@ class CoordinatorAgent(BaseAgent):
         """Bind the Coordinator's tools and instructions to this workflow session."""
         submit_task_tool = register_agent_tool(
             submit_task,
-            submit_task_operation=partial(enqueue_task_submission, workflow),
+            accept_task=workflow.accept_task,
         )
         super().__init__(
             agent_name,
@@ -73,18 +69,12 @@ class CoordinatorAgent(BaseAgent):
             ]
         )
 
-    @staticmethod
-    async def parse_task(workflow_state: dict[str, object]) -> None:
-        """Queue the startup prompt without changing graph state; submit_task delivers the result."""
-        coordinator_agent = cast(CoordinatorAgent, workflow_state["agent"])
-        prompt_context = {"startup_task_file": workflow_state["startup_task_file"]}
+    async def parse_task(self, task_file: Path) -> None:
+        """Prompt the Coordinator to read the task file and deliver its declaration through submit_task."""
         user_prompt = merge_prompts(
             [
-                render_prompt(CoordinatorAgent.common_user_prompt_path),
-                render_prompt(CoordinatorAgent.parse_task_prompt_path, prompt_context),
+                render_prompt(self.common_user_prompt_path),
+                render_prompt(self.parse_task_prompt_path, {"startup_task_file": str(task_file)}),
             ]
         )
-        await coordinator_agent.send_message(
-            user_prompt,
-            expected_tool_calls=coordinator_agent.parse_task_tools,
-        )
+        await self.send_message(user_prompt, expected_tool_calls=self.parse_task_tools)

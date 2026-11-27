@@ -45,6 +45,9 @@ class ExpectedToolCalls:
             raise ValueError(f"Step {self.step!r} must name at least one expected tool.")
 
 
+type ToolSubmissionStatus = Literal["submitted", "not_submitted", "exceed_limit_try"]
+
+
 @dataclass
 class StepToolCalls:
     """Track one agent's successful expected tools for the current prompt in a workflow step."""
@@ -52,7 +55,7 @@ class StepToolCalls:
     expected: ExpectedToolCalls
     attempt_number: int
     successful_tools: set[str] = field(default_factory=set)
-    outcome: Literal["submitted", "not_submitted", "exceed_limit_try"] | None = None
+    outcome: ToolSubmissionStatus | None = None
 
     def has_expected_tool_calls(self) -> bool:
         """Tell the settle subflow whether the successful tool calls satisfy this step."""
@@ -142,6 +145,20 @@ class BaseAgent:
         await self.agent_runtime.wait_for_settle()
         if self.state == AgentState.RUNNING:
             self.state = AgentState.SLEEPING
+
+    def tool_submission_status(self, *, max_attempts: int) -> ToolSubmissionStatus:
+        """Resolve the settled turn's expected tool calls once, counting the initial prompt as an attempt."""
+        calls = self.step_tool_calls
+        if calls is None:
+            raise RuntimeError("The settled step did not declare its expected tool calls.")
+        if calls.outcome is None:
+            if calls.has_expected_tool_calls():
+                calls.outcome = "submitted"
+            elif calls.attempt_number >= max_attempts:
+                calls.outcome = "exceed_limit_try"
+            else:
+                calls.outcome = "not_submitted"
+        return calls.outcome
 
     def observe_tool_submission(self, tool: AgentTool) -> AgentTool:
         """Leave the payload with its owner and record successful expected calls for this member."""

@@ -7,14 +7,14 @@ from collections.abc import Awaitable, Callable
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskSubmission
+from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskRevision, TaskSubmission
 
 
 async def submit_task(
     task_submission: TaskSubmission,
     *,
-    submit_task_operation: Callable[[TaskSubmission], Awaitable[None]],
-) -> dict[str, object]:
+    accept_task: Callable[[TaskSubmission], Awaitable[TaskRevision]],
+) -> dict[str, int]:
     """Convert the user's requirements into a complete and accurate task declaration for the team.
 
     Preserve every known requirement. Make reasonable assumptions and fill optional details from the available
@@ -23,15 +23,11 @@ async def submit_task(
     pairs, and task_comments when known. Keep credentials in the host environment instead of the task declaration.
     In constraints, preserve common_constraints, resources, stop_conditions, and time_budget. In agent_team,
     declare each role's model, effort, and quota. For updates, provide the complete current task again and retain
-    unchanged requirements. The Workflow assigns the revision number and persists the accepted declaration.
+    unchanged requirements. A successful call returns revision_number after publication and quota application.
+    An unchanged declaration returns the same revision number and still signals a submission to the workflow.
     """
     try:
-        await submit_task_operation(task_submission)
-    except ValueError as validation_error:
-        raise ToolError(
-            f"Task declaration was not accepted. Missing or invalid fields: {validation_error} "
-            "Add every field named in the error, then call submit_task again with a complete "
-            "and accurate declaration. Preserve every known requirement, use registered "
-            "roles and valid model/effort/quota values, and do not add revision or next-stage fields."
-        ) from validation_error
-    return {"task_submission_queued": True}
+        task_revision = await accept_task(task_submission)
+    except ValueError as error:
+        raise ToolError(f"Task declaration was not accepted: {error}") from error
+    return {"revision_number": task_revision.revision_number}

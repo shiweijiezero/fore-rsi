@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, cast
 from loguru import logger
 
 from fore_rsi.rsi_workflows.base_agent import AgentState
-from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskRevision, TaskSubmission
+from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskRevision
 
 if TYPE_CHECKING:
     from fore_rsi.rsi_workflows.base_workflow import BaseWorkflow
@@ -21,24 +21,13 @@ async def wait_for_task_submission(
     workflow: "DefaultWorkflow",
     workflow_state: Mapping[str, object],
 ) -> dict[str, object]:
-    """Consume the next queued Coordinator submission and return it with the existing workflow state."""
-    task_submission = await workflow.task_submission_queue.get()
-    return {**workflow_state, "task_submission": task_submission}
-
-
-async def enqueue_task_submission(
-    workflow: "DefaultWorkflow",
-    task_submission: TaskSubmission,
-) -> None:
-    """Publish one Coordinator task submission to the Workflow-owned queue."""
-    await workflow.task_submission_queue.put(task_submission)
+    """Pass one revision already accepted by submit_task to the inference graph."""
+    task_revision = await workflow.task_revision_queue.get()
+    return {**workflow_state, "task_revision": task_revision, "task_submission": task_revision.task_submission}
 
 
 async def update_task_to_agents(workflow: "BaseWorkflow", workflow_state: Mapping[str, object]) -> None:
-    """Steer working members to the new revision; leave it in other members' inboxes."""
-    if not workflow_state["is_new_task_revision"]:
-        return
-
+    """Notify working and idle members of the accepted submission's task revision."""
     revision = cast(TaskRevision, workflow_state["task_revision"])
     message = (
         f"Task revision {revision.revision_number} is available. "

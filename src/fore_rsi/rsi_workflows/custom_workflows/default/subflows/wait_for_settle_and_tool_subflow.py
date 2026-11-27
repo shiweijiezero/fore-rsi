@@ -39,15 +39,4 @@ async def wait_for_settle(workflow_state: dict[str, object]) -> None:
 def is_tool_submission(workflow_state: dict[str, object], *, max_attempts: int) -> dict[str, object]:
     """Check the step's expected tool calls after settle; the caller owns routing and tool payloads."""
     agent = cast(BaseAgent, workflow_state["agent"])
-    step_tool_calls = agent.step_tool_calls
-    if step_tool_calls is None:
-        raise RuntimeError("The settled step did not declare its expected tool calls.")
-
-    if step_tool_calls.outcome is None:
-        if step_tool_calls.has_expected_tool_calls():
-            step_tool_calls.outcome = "submitted"
-        elif step_tool_calls.attempt_number >= max_attempts:
-            step_tool_calls.outcome = "exceed_limit_try"
-        else:
-            step_tool_calls.outcome = "not_submitted"
-    return {**workflow_state, "tool_submission_status": step_tool_calls.outcome}
+    return {**workflow_state, "tool_submission_status": agent.tool_submission_status(max_attempts=max_attempts)}
