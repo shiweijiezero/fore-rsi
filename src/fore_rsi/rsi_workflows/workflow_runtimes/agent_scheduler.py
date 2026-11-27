@@ -166,8 +166,9 @@ class AgentScheduler:
                     else None
                 )
                 if workgroup is None:
-                    workgroup = creation_request.workflow.create_workgroup(
-                        creation_request.workgroup_name
+                    workgroup = await creation_request.workflow.create_workgroup(
+                        workspace_id=creation_request.workspace_id,
+                        workgroup_name=creation_request.workgroup_name,
                     )
                 agent = agent_class(
                     creation_request.agent_name,
@@ -177,8 +178,8 @@ class AgentScheduler:
                 )
                 workgroup.agents[creation_request.agent_name] = agent
                 self.active_agents[agent] = creation_request.quota_key
-        except asyncio.CancelledError:
-            # A cancelled waiter must leave the queue so it cannot consume a later slot.
+        except BaseException:
+            # A cancelled or rejected request must not block later requests in the same queue.
             await self.cancel_agent_creation(creation_request)
             raise
 

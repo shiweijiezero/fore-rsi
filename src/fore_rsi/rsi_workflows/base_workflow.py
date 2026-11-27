@@ -3,11 +3,14 @@
 
 """Execution interface and discovery metadata shared by ForeRSI workflows."""
 
+import asyncio
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
+from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import ClassVar
 
-from fore_rsi.config import WorkflowConfig
+from fore_rsi.config import AgentConfig, WorkflowConfig
 from fore_rsi.rsi_workflows.agent_runtimes.tool_mcp import ToolMcpHost
 from fore_rsi.rsi_workflows.base_agent import AgentState, BaseAgent
 from fore_rsi.rsi_workflows.workflow_runtimes.agent_scheduler import AgentScheduler
@@ -32,8 +35,10 @@ class BaseWorkflow(ABC):
         # Workflow owns global Agent and Workgroup naming; Scheduler owns active reservations.
         self.agent_name_counters: dict[str, int] = {}
         self.workgroup_sequence = 0
-        self.workgroups: dict[str, Workgroup] = {}
-        self.global_workgroup = self.create_workgroup(WorkflowConfig.GLOBAL_WORKGROUP_NAME)
+        self.global_workgroup = Workgroup(WorkflowConfig.GLOBAL_WORKGROUP_NAME)
+        self.workgroups: dict[str, Workgroup] = {
+            self.global_workgroup.workgroup_name: self.global_workgroup,
+        }
 
     @abstractmethod
     async def run_workflow(self, workspace_id: str) -> None:
@@ -46,8 +51,14 @@ class BaseWorkflow(ABC):
             for agent_name in tuple(workgroup.agents):
                 await self.close_agent(workgroup_name, agent_name)
 
-    def create_workgroup(self, workgroup_name: str | None = None) -> Workgroup:
-        """Create an empty Workgroup with an explicit or workflow-assigned name."""
+    async def create_workgroup(
+        self,
+        *,
+        workspace_id: str,
+        workgroup_name: str | None = None,
+        agents: Sequence[tuple[type[BaseAgent], AgentConfig]] = (),
+    ) -> Workgroup:
+        """Register a group and return it when all requested members are ready in the workspace."""
         if workgroup_name is None:
             self.workgroup_sequence += 1
             workgroup_name = f"workgroup-{self.workgroup_sequence}"
@@ -57,6 +68,40 @@ class BaseWorkflow(ABC):
             )
         workgroup = Workgroup(workgroup_name)
         self.workgroups[workgroup_name] = workgroup
+        if not agents:
+            return workgroup
+
+        member_starts: dict[str, asyncio.Task[BaseAgent]] = {}
+        try:
+            async with asyncio.TaskGroup() as startup:
+                for agent_class, agent_config in agents:
+                    agent_name = self.next_agent_name(agent_class.role_name)
+                    member_starts[agent_name] = startup.create_task(
+                        self.agent_scheduler.create_agent(
+                            agent_class=agent_class,
+                            agent_name=agent_name,
+                            workgroup_name=workgroup_name,
+                            agent_config=agent_config,
+                            workflow=self,
+                            workspace_id=workspace_id,
+                            is_entry_agent=False,
+                        )
+                    )
+            # TaskGroup does not raise for a child that was independently cancelled.
+            for member_start in member_starts.values():
+                member_start.result()
+        except BaseException:
+            # Only forget a member after it closes; workflow shutdown can retry failed closes.
+            async def rollback_member(agent_name: str) -> None:
+                await self.close_agent(workgroup.workgroup_name, agent_name)
+                workgroup.agents.pop(agent_name, None)
+
+            async with AsyncExitStack() as cleanup:
+                for agent_name in member_starts:
+                    cleanup.push_async_callback(rollback_member, agent_name)
+            if not workgroup.agents:
+                del self.workgroups[workgroup_name]
+            raise
         return workgroup
 
     def next_agent_name(self, role_name: str) -> str:

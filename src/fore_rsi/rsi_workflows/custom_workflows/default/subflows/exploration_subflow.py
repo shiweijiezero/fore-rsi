@@ -5,9 +5,13 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskRevision
+
+from ..agents.checker import CheckerAgent
+from ..agents.explorer import ExplorerAgent
 
 if TYPE_CHECKING:
     from ..workflow import DefaultWorkflow
@@ -62,4 +66,14 @@ async def run_exploration_subflow(
 
     retire --> retire_workgroup --> END
     """
-    raise NotImplementedError("The exploration subflow is not implemented.")
+    members = []
+    roles = task_revision.task_submission.agent_team.roles
+    for agent_class in (ExplorerAgent, CheckerAgent):
+        config = workflow.default_agent_config
+        if allocations := roles.get(agent_class.role_name):
+            allocation = allocations[0]
+            config = replace(config, model=allocation.model, effort=allocation.effort)
+        members.append((agent_class, config))
+
+    await workflow.create_workgroup(workspace_id=workspace_id, agents=members)
+    raise NotImplementedError("The exploration stages after workgroup creation are not implemented.")
