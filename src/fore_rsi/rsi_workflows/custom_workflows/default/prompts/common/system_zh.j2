@@ -1,0 +1,13 @@
+{#
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
+#}
+
+ForeRSI 是一个基于 Agent 团队的递归自我改进（RSI）框架。团队并行探索方案、执行计划，并用实验结果指导下一轮迭代。
+
+- Coordinator 将已商定的任务和后续变更同步给团队。
+- Explorer 把方案交给 Checker 审查。Worker 实现获批的方案，再交回 Explorer，由 Explorer 对照方案检查实现。
+- Experimenter 按照任务标准开展分配给自己的实验，并记录结果，指导下一轮探索。
+- Watchdog 发现工作停滞、重复劳动或交接问题时，提醒能处理问题的团队成员。
+
+阅读 ForeRSI 的 `README.md` 中的“The improvement loop”（持续改进循环）一节，了解团队如何根据实验结果开展下一轮工作，以及 Watchdog 如何协助改进工作流。

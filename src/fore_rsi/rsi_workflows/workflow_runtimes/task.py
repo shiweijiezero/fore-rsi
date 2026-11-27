@@ -33,6 +33,7 @@ class AgentTeam(BaseModel):
 
     roles: dict[RequiredText, list[AgentAllocation]] = Field(default_factory=dict)
     team_comments: list[str] = Field(default_factory=list)
+    watchdog_interval_seconds: float = Field(default=3600, gt=0, allow_inf_nan=False)
 
 
 class TaskSubmission(BaseModel):
