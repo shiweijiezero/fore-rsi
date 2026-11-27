@@ -10,10 +10,14 @@ from typing import ClassVar
 
 from loguru import logger
 
-from fore_rsi.config import AgentConfig, WorkflowConfig
+from fore_rsi.config import WorkflowConfig
 from fore_rsi.rsi_workflows.base_agent import AgentState, BaseAgent
 from fore_rsi.rsi_workflows.base_workflow import BaseWorkflow
-from fore_rsi.rsi_workflows.workflow_runtimes.task import Task, TaskRevision, TaskSubmission
+from fore_rsi.rsi_workflows.workflow_runtimes.task import (
+    Task,
+    TaskRevision,
+    TaskSubmission,
+)
 
 from .agents.checker import CheckerAgent
 from .agents.coordinator import CoordinatorAgent
@@ -39,7 +43,6 @@ class DefaultWorkflow(BaseWorkflow):
         """Create task intake state without starting native Agent execution."""
         super().__init__(config, session_directory)
         self.task = Task(session_directory)
-        self.default_agent_config = AgentConfig(harness=config.harness_or_default)
         self.task_revision_queue: asyncio.Queue[TaskRevision] = asyncio.Queue()
         self.accepting_tasks = True
 

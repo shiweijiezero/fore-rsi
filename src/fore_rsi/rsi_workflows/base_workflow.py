@@ -7,6 +7,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from contextlib import AsyncExitStack
+from dataclasses import replace
 from pathlib import Path
 from typing import ClassVar
 
@@ -14,6 +15,7 @@ from fore_rsi.config import AgentConfig, WorkflowConfig
 from fore_rsi.rsi_workflows.agent_runtimes.tool_mcp import ToolMcpHost
 from fore_rsi.rsi_workflows.base_agent import AgentState, BaseAgent
 from fore_rsi.rsi_workflows.workflow_runtimes.agent_scheduler import AgentScheduler
+from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskRevision
 from fore_rsi.rsi_workflows.workgroup import Workgroup
 
 
@@ -27,6 +29,7 @@ class BaseWorkflow(ABC):
     def __init__(self, config: WorkflowConfig, session_directory: Path) -> None:
         """Bind workflow settings and storage, then initialize scheduling and workgroups."""
         self.config = config
+        self.default_agent_config = AgentConfig(harness=config.harness_or_default)
         self.session_directory = session_directory
         self.tool_mcp_host = ToolMcpHost()
         self.agent_scheduler = AgentScheduler(
@@ -56,9 +59,10 @@ class BaseWorkflow(ABC):
         *,
         workspace_id: str,
         workgroup_name: str | None = None,
-        agents: Sequence[tuple[type[BaseAgent], AgentConfig]] = (),
+        agents: Sequence[type[BaseAgent]] = (),
+        task_revision: TaskRevision | None = None,
     ) -> Workgroup:
-        """Register a group and return it when all requested members are ready in the workspace."""
+        """Return a ready group using each role's first task allocation or the workflow defaults."""
         if workgroup_name is None:
             self.workgroup_sequence += 1
             workgroup_name = f"workgroup-{self.workgroup_sequence}"
@@ -73,8 +77,15 @@ class BaseWorkflow(ABC):
 
         member_starts: dict[str, asyncio.Task[BaseAgent]] = {}
         try:
+            roles = task_revision.task_submission.agent_team.roles if task_revision is not None else {}
             async with asyncio.TaskGroup() as startup:
-                for agent_class, agent_config in agents:
+                for agent_class in agents:
+                    agent_config = self.default_agent_config
+                    if allocations := roles.get(agent_class.role_name):
+                        allocation = allocations[0]
+                        agent_config = replace(
+                            agent_config, model=allocation.model, effort=allocation.effort
+                        )
                     agent_name = self.next_agent_name(agent_class.role_name)
                     member_starts[agent_name] = startup.create_task(
                         self.agent_scheduler.create_agent(
