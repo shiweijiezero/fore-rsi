@@ -119,7 +119,6 @@ class InferenceWorkflow(DefaultWorkflow):
         #              +--[have_task]--------> parse_task -> initialize_first_task
         #              +--[await_user_input]---------------> initialize_first_task
         #
-        # submit_task has already published the revision and applied its quotas.
         #                    initialize_first_task  wait_for_task_submission -> update_task_context
         #                         +---------+                 |
         #                         |         |                 v

@@ -53,10 +53,7 @@ class WorkflowRunner:
         process = psutil.Process()
         self._write_session_record(WorkflowState.RUNNING, process)
         try:
-            try:
-                await self.workflow.run_workflow(workspace_id)
-            finally:
-                await self.workflow.close_workflow()
+            await self.workflow.run(workspace_id)
         except asyncio.CancelledError:
             self._write_session_record(WorkflowState.STOPPED, process)
             raise

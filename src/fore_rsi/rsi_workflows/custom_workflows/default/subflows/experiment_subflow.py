@@ -3,8 +3,6 @@
 
 """Experiment execution and result delivery for the default workflow."""
 
-import asyncio
-from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskRevision
@@ -17,9 +15,6 @@ async def run_experiment_subflow(
     workflow: "DefaultWorkflow",
     workspace_id: str,
     task_revision: TaskRevision,
-    *,
-    experiment_pool: asyncio.Queue[str],
-    publish_experiment_result: Callable[[str], Awaitable[None]],
 ) -> None:
     """Run the submitted proposals and send each experiment result back to exploration.
 
@@ -40,4 +35,7 @@ async def run_experiment_subflow(
     exit_node --> END
     publish_result --> publish_experiment_result
     """
-    raise NotImplementedError("The experiment subflow is not implemented.")
+    try:
+        raise NotImplementedError("The experiment subflow is not implemented.")
+    finally:
+        workflow.experiment_results.shutdown()

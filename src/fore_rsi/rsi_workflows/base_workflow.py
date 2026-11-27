@@ -31,6 +31,11 @@ class BaseWorkflow(ABC):
         self.config = config
         self.default_agent_config = AgentConfig(harness=config.harness_or_default)
         self.session_directory = session_directory
+        self.task_revision_queue: asyncio.Queue[TaskRevision] = asyncio.Queue()
+        self.experiment_pool: asyncio.Queue[str] = asyncio.Queue()
+        self.experiment_results: asyncio.Queue[str] = asyncio.Queue()
+        self.accepting_tasks = True
+        self.subflow_tasks = asyncio.TaskGroup()
         self.tool_mcp_host = ToolMcpHost()
         self.agent_scheduler = AgentScheduler(
             role_classes=self.agent_roles,
@@ -43,16 +48,28 @@ class BaseWorkflow(ABC):
             self.global_workgroup.workgroup_name: self.global_workgroup,
         }
 
+    async def run(self, workspace_id: str) -> None:
+        """Run the workflow to completion and release its agents after all subflows exit."""
+        try:
+            async with self.subflow_tasks:
+                try:
+                    await self.run_workflow(workspace_id)
+                finally:
+                    await self.close_workflow()
+        finally:
+            for workgroup_name, workgroup in tuple(self.workgroups.items()):
+                for agent_name in tuple(workgroup.agents):
+                    await self.close_agent(workgroup_name, agent_name)
+
     @abstractmethod
     async def run_workflow(self, workspace_id: str) -> None:
-        """Execute this workflow in the workspace prepared by WorkflowRunner."""
+        """Implement the workflow's steps in the prepared workspace; return when its work is done."""
         ...
 
     async def close_workflow(self) -> None:
-        """Close the workflow's agents and release their reservations before the runner records the outcome."""
-        for workgroup_name, workgroup in tuple(self.workgroups.items()):
-            for agent_name in tuple(workgroup.agents):
-                await self.close_agent(workgroup_name, agent_name)
+        """Stop accepting submissions so the revision listener can drain and exit."""
+        self.accepting_tasks = False
+        self.task_revision_queue.shutdown()
 
     async def create_workgroup(
         self,

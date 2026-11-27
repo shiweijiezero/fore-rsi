@@ -8,8 +8,6 @@ from dataclasses import replace
 from pathlib import Path
 from typing import ClassVar
 
-from loguru import logger
-
 from fore_rsi.config import WorkflowConfig
 from fore_rsi.rsi_workflows.base_agent import AgentState, BaseAgent
 from fore_rsi.rsi_workflows.base_workflow import BaseWorkflow
@@ -36,40 +34,23 @@ class DefaultWorkflow(BaseWorkflow):
 
     agent_roles: ClassVar[dict[str, type[BaseAgent]]] = {
         role.role_name: role
-        for role in (CoordinatorAgent, ExplorerAgent, CheckerAgent, ExperimenterAgent, WatchdogAgent)
+        for role in (
+            CoordinatorAgent,
+            ExplorerAgent,
+            CheckerAgent,
+            ExperimenterAgent,
+            WatchdogAgent,
+        )
     }
 
     def __init__(self, config: WorkflowConfig, session_directory: Path) -> None:
         """Create task intake state without starting native Agent execution."""
         super().__init__(config, session_directory)
         self.task = Task(session_directory)
-        self.task_revision_queue: asyncio.Queue[TaskRevision] = asyncio.Queue()
-        self.accepting_tasks = True
+        self.watchdog_task: asyncio.Task[None] | None = None
 
     async def run_workflow(self, workspace_id: str) -> None:
-        """Target execution flow for the default workflow in the runner's prepared workspace.
-
-        START --> create_agent[Coordinator] --> receive_task
-
-        receive_task
-              +--[exceed_limit_try] --> END
-              +--[first accepted submission]--+--> run_exploration_subflow
-                                              +--> run_experiment_subflow
-                                              +--> run_watchdog_subflow
-                                              +--> receive_task_updates
-
-        receive_task_updates:
-            receive_task
-                  +--[accepted] --> update_task_to_agents --> receive_task
-                  +--[closed] ----> END
-
-        submit_task (Coordinator MCP tool, including repeat submissions):
-            accept_task --> validate role quotas --> publish_task --> apply quotas
-                        --> enqueue TaskRevision --> return revision_number
-
-        run_exploration_subflow --[submit_to_experiment]--> run_experiment_subflow
-        run_experiment_subflow  --[experiment_result]-----> run_exploration_subflow
-        """
+        """Start the Coordinator and wait for the first accepted task before running the subflows."""
         coordinator = await self.agent_scheduler.create_agent(
             agent_class=CoordinatorAgent,
             agent_name=self.next_agent_name(CoordinatorAgent.role_name),
@@ -83,83 +64,45 @@ class DefaultWorkflow(BaseWorkflow):
             workspace_id=workspace_id,
             is_entry_agent=True,
         )
-        # The tool has already published the revision and applied its quotas when this wait returns.
         task_revision = await self.receive_task(coordinator, task_file=self.config.task)
-        if task_revision is None:
-            return
+        exploration, experiments = self.init_subflows(workspace_id, task_revision)
+        self.subflow_tasks.create_task(self.receive_task_updates())
+        await exploration
+        await experiments
 
-        # These queues carry work between exploration and experiment. Task revisions arrive on the
-        # Coordinator's separate queue, so applying a revision does not wait for an experiment result.
-        experiment_pool = asyncio.Queue[str]()
-        experiment_results = asyncio.Queue[str]()
-        async with asyncio.TaskGroup() as workflow_tasks:
-            exploration_task = workflow_tasks.create_task(
-                run_exploration_subflow(
-                    self,
-                    workspace_id,
-                    task_revision,
-                    experiment_results=experiment_results,
-                    submit_to_experiment=experiment_pool.put,
-                )
-            )
-            experiment_task = workflow_tasks.create_task(
-                run_experiment_subflow(
-                    self,
-                    workspace_id,
-                    task_revision,
-                    experiment_pool=experiment_pool,
-                    publish_experiment_result=experiment_results.put,
-                )
-            )
-            # When a producer finishes, its consumer can drain the queue and then stop waiting.
-            exploration_task.add_done_callback(lambda _: experiment_pool.shutdown())
-            experiment_task.add_done_callback(lambda _: experiment_results.shutdown())
-            watchdog_task = workflow_tasks.create_task(
-                run_watchdog_subflow(self, workspace_id, task_revision)
-            )
-            workflow_tasks.create_task(self.receive_task_updates(coordinator))
+    def init_subflows(
+        self, workspace_id: str, task_revision: TaskRevision
+    ) -> tuple[asyncio.Task[None], asyncio.Task[None]]:
+        """Start the team and return the two tasks whose completion ends the workflow."""
+        tasks = self.subflow_tasks
+        exploration = tasks.create_task(run_exploration_subflow(self, workspace_id, task_revision))
+        experiments = tasks.create_task(run_experiment_subflow(self, workspace_id, task_revision))
+        self.watchdog_task = tasks.create_task(run_watchdog_subflow(self, workspace_id, task_revision))
+        return exploration, experiments
 
-            # All four tasks are running. On normal completion, drain accepted submissions before
-            # returning to WorkflowRunner for agent cleanup. TaskGroup handles failures and cancellation.
-            try:
-                await exploration_task
-                await experiment_task
-            finally:
-                self.close_task_intake()
-                watchdog_task.cancel()
+    async def close_workflow(self) -> None:
+        """Stop watchdog supervision and close task intake when the workflow exits."""
+        if self.watchdog_task is not None:
+            self.watchdog_task.cancel()
+        await super().close_workflow()
 
-    async def accept_task(self, submission: TaskSubmission) -> TaskRevision:
-        """Handle submit_task: publish the task, apply its quotas and deliver one accepted revision.
-
-        accept_task --> validate_role_quotas
-                           +--[invalid] --> tool error
-                           +--[valid] ----> publish_task --> apply quotas --> deliver TaskRevision
-        """
+    async def submit_task(self, submission: TaskSubmission) -> TaskRevision:
+        """Return the accepted revision and notify listeners even when the submission is unchanged."""
         async with self.agent_scheduler.role_quota_update(submission.agent_team.roles):
             if not self.accepting_tasks:
                 raise ValueError("Task intake is closed.")
-            # No await between publication and delivery: concurrent tool calls keep publication order.
             task_revision = self.task.publish_task(submission)
-            self.task_revision_queue.put_nowait(task_revision)
+        # Receiving a revision can start new agents, so its role quotas must be in effect first.
+        self.task_revision_queue.put_nowait(task_revision)
         return task_revision
-
-    def close_task_intake(self) -> None:
-        """Reject further submissions while allowing consumers to drain accepted revisions."""
-        self.accepting_tasks = False
-        self.task_revision_queue.shutdown()
-
-    async def close_workflow(self) -> None:
-        """Close task intake even if startup stopped before the subflows, then release the agents."""
-        self.close_task_intake()
-        await super().close_workflow()
 
     async def receive_task(
         self,
         coordinator: CoordinatorAgent,
         *,
         task_file: Path | None = None,
-    ) -> TaskRevision | None:
-        """Take one accepted revision, or return None if file parsing fails or intake closes.
+    ) -> TaskRevision:
+        """Wait for the first accepted revision, prompting the Coordinator when given a task file.
 
         receive_task
               +--[task_file] --> parse_task --> wait_for_settle --> tool_submission_status
@@ -168,11 +111,9 @@ class DefaultWorkflow(BaseWorkflow):
         tool_submission_status
               +--[submitted] --------> wait_for_task_revision
               +--[not_submitted] ----> parse_task
-              +--[exceed_limit_try] -> END
+              +--[exceed_limit_try] -> raise RuntimeError
 
-        wait_for_task_revision
-              +--[received] --> return TaskRevision
-              +--[closed] ----> END
+        wait_for_task_revision --> return TaskRevision
         """
         if task_file is not None:
             status = "not_submitted"
@@ -181,22 +122,20 @@ class DefaultWorkflow(BaseWorkflow):
                 await coordinator.wait_for_settle()
                 status = coordinator.tool_submission_status(max_attempts=self.config.max_attempts)
             if status == "exceed_limit_try":
-                logger.warning(
-                    "{} did not submit {} after {} attempts",
-                    coordinator.agent_name,
-                    task_file,
-                    self.config.max_attempts,
+                raise RuntimeError(
+                    f"{coordinator.agent_name} did not submit {task_file} "
+                    f"after {self.config.max_attempts} attempts."
                 )
-                return None
 
-        try:
-            return await self.task_revision_queue.get()
-        except asyncio.QueueShutDown:
-            return None
+        return await self.task_revision_queue.get()
 
-    async def receive_task_updates(self, coordinator: CoordinatorAgent) -> None:
-        """Notify agents on each accepted submission, even when it reuses the current task revision."""
-        while (task_revision := await self.receive_task(coordinator)) is not None:
+    async def receive_task_updates(self) -> None:
+        """Notify agents on each accepted submission until the revision queue closes and drains."""
+        while True:
+            try:
+                task_revision = await self.task_revision_queue.get()
+            except asyncio.QueueShutDown:
+                return
             await self.update_task_to_agents(task_revision)
 
     async def update_task_to_agents(self, task_revision: TaskRevision) -> None:

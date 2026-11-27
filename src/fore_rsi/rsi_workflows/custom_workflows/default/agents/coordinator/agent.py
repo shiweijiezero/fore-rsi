@@ -48,7 +48,7 @@ class CoordinatorAgent(BaseAgent):
         """Bind the Coordinator's tools and instructions to this workflow session."""
         submit_task_tool = register_agent_tool(
             submit_task,
-            accept_task=workflow.accept_task,
+            submit_to_workflow=workflow.submit_task,
         )
         super().__init__(
             agent_name,

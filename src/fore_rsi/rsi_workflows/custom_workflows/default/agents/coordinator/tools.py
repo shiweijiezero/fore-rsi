@@ -13,7 +13,7 @@ from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskRevision, TaskSubm
 async def submit_task(
     task_submission: TaskSubmission,
     *,
-    accept_task: Callable[[TaskSubmission], Awaitable[TaskRevision]],
+    submit_to_workflow: Callable[[TaskSubmission], Awaitable[TaskRevision]],
 ) -> dict[str, int]:
     """Convert the user's requirements into a complete and accurate task declaration for the team.
 
@@ -27,7 +27,7 @@ async def submit_task(
     An unchanged declaration returns the same revision number and still signals a submission to the workflow.
     """
     try:
-        task_revision = await accept_task(task_submission)
+        task_revision = await submit_to_workflow(task_submission)
     except ValueError as error:
         raise ToolError(f"Task declaration was not accepted: {error}") from error
     return {"revision_number": task_revision.revision_number}

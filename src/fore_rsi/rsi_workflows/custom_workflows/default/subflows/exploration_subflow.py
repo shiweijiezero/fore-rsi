@@ -3,8 +3,6 @@
 
 """Explorer research, implementation, feedback, and Workgroup lifecycle subflow."""
 
-import asyncio
-from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskRevision
@@ -20,9 +18,6 @@ async def run_exploration_subflow(
     workflow: "DefaultWorkflow",
     workspace_id: str,
     task_revision: TaskRevision,
-    *,
-    experiment_results: asyncio.Queue[str],
-    submit_to_experiment: Callable[[str], Awaitable[None]],
 ) -> None:
     """Explore directions, submit proposals for experiment, and read the resulting feedback.
 
@@ -65,9 +60,12 @@ async def run_exploration_subflow(
 
     retire --> retire_workgroup --> END
     """
-    await workflow.create_workgroup(
-        workspace_id=workspace_id,
-        agents=[ExplorerAgent, CheckerAgent],
-        task_revision=task_revision,
-    )
-    raise NotImplementedError("The exploration stages after workgroup creation are not implemented.")
+    try:
+        await workflow.create_workgroup(
+            workspace_id=workspace_id,
+            agents=[ExplorerAgent, CheckerAgent],
+            task_revision=task_revision,
+        )
+        raise NotImplementedError("The exploration stages after workgroup creation are not implemented.")
+    finally:
+        workflow.experiment_pool.shutdown()
