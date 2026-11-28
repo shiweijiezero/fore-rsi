@@ -1,0 +1,11 @@
+{#
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
+#}
+
+Choose your share of the total measurement budget in `{{ task_file }}`. The team takes turns choosing. A null entry below means the member has not chosen yet; an empty list means standby.
+
+Resource units and scopes: {{ inventory | tojson(indent=2) }}
+Current owners (workgroup/member): {{ allocations | tojson(indent=2) }}
+
+Call `set_experiment_resources` with the full list of unit IDs you intend to manage. Take only what you can use and leave enough for the rest of the team. Choose an empty list to stand by. This is a planning turn: wait for an assigned exploration item before starting any jobs.

@@ -119,7 +119,7 @@ fore-rsi --session sglang-throughput
 
 ForeRSI 优先复用已安装的 CLI，缺失时调用所选后端的官方安装器。按安装器提示准备依赖；需要认证时，使用原生工具的登录流程。
 
-也可以根据任务需要[定制 RSI 工作流](#设计你的定制-rsi-工作流)，调整团队角色、工具、执行步骤与评价标准。参数说明见 [CLI 参考](docs/cli.md)，或运行 `fore-rsi --help`。
+也可以根据任务需要[定制 RSI 工作流](#设计你的定制-rsi-工作流)，调整团队角色、工具、执行步骤与评价标准。参数说明见 [CLI 参考](docs/cli_zh.md)，或运行 `fore-rsi --help`。
 
 ### 提供任务
 

@@ -47,7 +47,7 @@ class WorkflowConfig:
     # Set reasoning effort for the workflow's entry agent only. Omit to keep the backend's setting.
     entry_effort: Annotated[ReasoningEffort | None, arg(name="effort", prefix_name=False, help_behavior_hint="")] = None
 
-    # Maximum prompt attempts per required tool submission, including the first attempt.
+    # Attempt limit for required tool submissions and direction selection. Each group shares this limit across its finish reviews.
     max_attempts: Annotated[int, arg(prefix_name=False)] = 3
 
     def __post_init__(self) -> None:

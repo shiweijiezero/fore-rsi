@@ -3,25 +3,17 @@ SPDX-License-Identifier: Apache-2.0
 SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
 #}
 
-## Exploration and discovery
+Explore item {{ exploration_item.exploration_id }}, **{{ exploration_item.name }}**, under the current task in `{{ task_file }}`.
 
-Independently investigate and develop solutions within the confirmed direction. Treat prior discussions and findings as supplementary information, and base decisions on the current task, code, and observations.
-
-- Discover subtle, repeatable phenomena and overlooked opportunities. Use focused measurements or inexpensive experiments to identify causes and consequential bottlenecks, then design concrete solutions: explain what should change, why it should help, and how to test that explanation.
-- Compare plausible solutions by expected benefit, implementation and maintenance complexity, and resource cost. Implement a promising option, check correctness, and validate against the baseline where resources permit. Aim for one of the most cost-effective options among those reasonably investigated, and revise the design when results contradict its assumptions.
-- Prepare the experiments and executable commands for the Experimenter. Specify the candidate and baseline code versions or paths, working directory, dependencies, environment, inputs, parameters, resource requirements, metrics, and output paths needed to run them. Provide comparable baseline and candidate commands and criteria for assessing the hypothesis, correctness, and benefit versus cost. Check that commands match the submitted code and clearly identify any runs awaiting the experiment stage.
-- Write and maintain the current exploration direction's record through the available tools or files. Record observations, solution design and rationale, code changes, experiment commands, validation results, and links to logs or artifacts, including negative results. Update the direction's conclusions and next actions after each validation or returned result. Keep completed checks distinct from planned experiments; record concrete blockers and required follow-up when work cannot proceed. Submit the candidate and its record for Checker review when ready.
-
-{% if feedback_type is defined and feedback_type == "checking" %}
-## Checker feedback
-
-{{ feedback_content }}
-
-Resolve actionable findings by correcting the implementation or experiment design and performing focused validation. Update the exploration direction's record with the changes and results, then submit the revised work for review. For findings that cannot be resolved within the task constraints, document the specific blocker and what is required to resolve it.
-{% elif feedback_type is defined and feedback_type == "experiment" %}
-## Experiment feedback
-
-{{ feedback_content }}
-
-Investigate the causes of improvements, regressions, and failures. Design and implement targeted changes where the results justify them, perform feasible checks, and prepare revised experiment commands as needed. Write the returned results and resulting conclusions into the exploration direction's record, then submit the updated candidate for review when further experimentation is warranted.
+{{ exploration_item.description }}
+Parents: {{ exploration_item.parent_exploration_ids | tojson }}
+Writable checkout: `{{ exploration_item.code_workspace_path }}`
+Working record: `{{ exploration_record_path }}`
+{% if feedback %}
+The Checker requested changes: {{ feedback }}
+Revise the existing implementation in this checkout. Keep the same item and build on the work already here.
+{% else %}
+Read the approved proposal and the parent records. If the child took over its direct parent's checkout, continue from the files already there. For a new directory, first make an independent working copy of the chosen parent version, including its local source and configuration changes. Implement the proposal in the child's registered checkout; leave all other checkouts unchanged.
 {% endif %}
+
+Explain the design choices, actual changes, source revision and remaining uncertainties in the working record. Prepare the commands for a comparable baseline and candidate evaluation, including the working directory, inputs, resources, metrics and artifact destinations. Submit the ordered commands with `{{ tool }}`. The Experimenter runs them after review; do not run the experiment here.

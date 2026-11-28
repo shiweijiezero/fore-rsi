@@ -10,6 +10,9 @@ from fore_rsi.config import AgentConfig
 from fore_rsi.rsi_workflows.agent_runtimes.tool_mcp import register_agent_tool
 from fore_rsi.rsi_workflows.base_agent import BaseAgent, ExpectedToolCalls
 from fore_rsi.rsi_workflows.custom_workflows.default.agents.coordinator.tools import (
+    confirm_experiment_cleanup,
+    relay_experiment_result,
+    request_exploration_direction,
     submit_task,
 )
 from fore_rsi.rsi_workflows.workflow_runtimes.workgroup import Workgroup
@@ -46,32 +49,23 @@ class CoordinatorAgent(BaseAgent):
         workflow: "DefaultWorkflow",
     ) -> None:
         """Bind the Coordinator's tools and instructions to this workflow session."""
-        submit_task_tool = register_agent_tool(submit_task, workflow=workflow)
-        super().__init__(
-            agent_name,
-            workgroup,
-            agent_config,
-            workflow=workflow,
-            tools=[submit_task_tool],
-        )
-        prompt_context = {
-            "role_name": self.role_name,
-            "agent_name": self.agent_name,
-            "workgroup_name": self.workgroup.workgroup_name,
-        }
+        tools = [register_agent_tool(tool, workflow=workflow) for tool in (
+            submit_task, request_exploration_direction, relay_experiment_result, confirm_experiment_cleanup,
+        )]
+        super().__init__(agent_name, workgroup, agent_config, workflow=workflow, tools=tools)
         self.system_prompt = merge_prompts(
             [
                 render_prompt(self.common_system_prompt_path),
-                render_prompt(self.system_prompt_path, prompt_context),
+                render_prompt(self.system_prompt_path, {"role_name": self.role_name}),
             ]
         )
 
-    async def parse_task(self, task_file: Path) -> None:
-        """Prompt the Coordinator to read the task file and deliver its declaration through submit_task."""
+    async def parse_task(self, task_file: Path) -> bool:
+        """Ask for the task declaration and return whether the Coordinator submitted it."""
         user_prompt = merge_prompts(
             [
                 render_prompt(self.common_user_prompt_path),
                 render_prompt(self.parse_task_prompt_path, {"startup_task_file": str(task_file)}),
             ]
         )
-        await self.send_message(user_prompt, expected_tool_calls=self.parse_task_tools)
+        return await self.request_submission(user_prompt, self.parse_task_tools)

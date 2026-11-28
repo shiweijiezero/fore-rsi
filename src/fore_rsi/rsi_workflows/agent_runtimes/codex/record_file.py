@@ -5,14 +5,15 @@
 
 import json
 import os
+import re
 from pathlib import Path
 from uuid import UUID
 
-from fore_rsi.utils.paths import write_private_text
+ROLLOUT_DIRECTORIES = ("sessions", "archived_sessions")
 
 
-def link_profile_sessions(link: Path, target: Path) -> None:
-    """Expose workflow-owned rollout files through the Codex profile without replacing existing data."""
+def link_rollout_directory(link: Path, target: Path) -> None:
+    """Expose workflow-owned rollouts through the member profile without replacing existing data."""
     target.mkdir(mode=0o700, parents=True, exist_ok=True)
     link.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     try:
@@ -22,8 +23,12 @@ def link_profile_sessions(link: Path, target: Path) -> None:
             raise RuntimeError(f"Codex profile directory is already in use: {link}") from None
 
 
-def prepare_codex_profile(profile: Path) -> None:
-    """Link Codex's user settings and credentials into the workflow-owned profile."""
+def prepare_codex_profile(profile: Path, storage: Path) -> None:
+    """Link Codex's workflow rollouts and user settings into this member's profile."""
+    # Native paginated forks find inherited history by ID in the same rollout store.
+    for name in ROLLOUT_DIRECTORIES:
+        link_rollout_directory(profile / name, storage / name)
+
     origin = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex").expanduser().resolve()
     origin.mkdir(mode=0o700, parents=True, exist_ok=True)
     profile.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -53,12 +58,28 @@ def prepare_codex_profile(profile: Path) -> None:
             link.symlink_to(source, target_is_directory=source.is_dir())
 
 
-def get_codex_thread(record: Path, sessions: Path) -> str | None:
-    """Pin the member's root Codex thread, discovering it only inside its rollout directory."""
-    if record.exists():
-        return str(UUID(record.read_text(encoding="utf-8").strip()))
+def thread_record_files(thread_id: str, storage: Path) -> tuple[Path, ...]:
+    """Locate active and archived rollout segments of one pinned Codex thread."""
+    thread = str(UUID(thread_id))
+    timestamp = r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}"
+    filename = re.compile(rf"rollout-{timestamp}-{thread}(?:-[0-9a-f-]+)?\.jsonl(?:\.zst)?")
+    return tuple(sorted(path.resolve() for name in ROLLOUT_DIRECTORIES
+                        for path in (storage / name).rglob(f"rollout-*-{thread}*.jsonl*")
+                        if filename.fullmatch(path.name) and path.is_file()))
 
+
+def get_codex_thread(record: Path, storage: Path) -> str | None:
+    """Find the member's persisted thread without selecting another member's rollout."""
+    if record.exists():
+        thread = str(UUID(record.read_text(encoding="utf-8").strip()))
+        # Starting Codex pins its identity before the first prompt materializes a rollout.
+        # Codex may append a separate rollout UUID after reverting a paginated thread.
+        return thread if thread_record_files(thread, storage) else None
+
+    # Older members discovered the root at shutdown and kept an isolated rollout directory.
+    # Never search the entire shared tree for an unpinned thread.
     roots: set[str] = set()
+    sessions = storage / "sessions" / record.stem
     for path in sorted(sessions.rglob("rollout-*.jsonl")):
         with path.open(encoding="utf-8") as stream:
             for line in stream:
@@ -85,8 +106,4 @@ def get_codex_thread(record: Path, sessions: Path) -> str | None:
 
     if len(roots) > 1:
         raise RuntimeError(f"Cannot identify one root Codex conversation in {sessions}.")
-    if not roots:
-        return None
-    thread = roots.pop()
-    write_private_text(record, thread + "\n")
-    return thread
+    return roots.pop() if roots else None

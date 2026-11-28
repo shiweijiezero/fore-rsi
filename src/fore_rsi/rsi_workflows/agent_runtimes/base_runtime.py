@@ -9,7 +9,7 @@ import sys
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, Self
 from urllib.parse import quote
 
 from fore_rsi.config import AgentConfig, WorkflowConfig
@@ -27,7 +27,6 @@ from fore_rsi.utils.terminal import (
 )
 
 type MessageDeliveryMode = Literal["queue", "steer"]
-
 
 class AgentRuntime(ABC):
     """Run and control one harness-managed agent for a workflow runner.
@@ -54,6 +53,8 @@ class AgentRuntime(ABC):
         self.agent_name = agent_name
         self.pane_key = f"fore-rsi.agent/{quote(workgroup_name, safe='')}/{quote(agent_name, safe='')}"
         self.terminal_session_name = workflow_directory.name
+        # Native session pickers may include several workflows with identically named members.
+        self.session_display_name = f"{self.terminal_session_name}/{workgroup_name}/{agent_name}"
         self.workflow_directory = workflow_directory
         self.terminal_id: str | None = None
         self.agent_config = agent_config
@@ -64,7 +65,17 @@ class AgentRuntime(ABC):
         self.pane_id: str | None = None
         self.message_lock = asyncio.Lock()
         self.lifecycle = asyncio.Lock()
+        self.retained_for_fork = False
         self.failed_pane_id: str | None = None
+
+    @abstractmethod
+    async def fork_from(self, seed: Self) -> None:
+        """Prepare an independent branch of a retained idle seed or a closed session from the same harness.
+
+        start() holds the child's lifecycle lock and publishes its tools before calling this hook.
+        The harness owns the history and branch ID; tools and launch settings belong to the child.
+        """
+        ...
 
     async def start(
         self,
@@ -72,11 +83,17 @@ class AgentRuntime(ABC):
         *,
         is_entry: bool = False,
         system_prompt: str | None = None,
+        fork_source: Self | None = None,
     ) -> None:
-        """Bind the agent's pane and navigation identity, then start or attach the selected CLI."""
+        """Open this member's conversation, optionally inheriting a settled fork source's history."""
         async with self.lifecycle:
             if self.terminal_id is not None:
                 raise RuntimeError("This runtime already controls a terminal.")
+            if fork_source is not None:
+                if type(fork_source) is not type(self):
+                    raise TypeError("A conversation can only be forked by the same harness.")
+                if fork_source.lifecycle.locked() or (fork_source.terminal_id is not None and not fork_source.retained_for_fork):
+                    raise RuntimeError("A fork source must be a retained idle seed or a closed session.")
             await self.remove_failed_pane()
             executable = await self.ensure_installed()
             try:
@@ -84,6 +101,8 @@ class AgentRuntime(ABC):
                     self.tool_mcp,
                     address_file=self.get_agent_file_path(".mcp-url"),
                 )
+                if fork_source is not None:
+                    await self.fork_from(fork_source)
                 command = self.build_launch_command(executable, system_prompt=system_prompt)
 
                 async def launch_agent() -> tuple[PaneLocation, dict[str, object]]:
@@ -141,6 +160,7 @@ class AgentRuntime(ABC):
                 await self.remove_failed_pane()
                 await self.stop_agent_runtime()
                 self.pane_id = self.terminal_id = None
+                self.retained_for_fork = False
             finally:
                 await self.tool_mcp_host.unpublish(self.tool_mcp)
 
@@ -191,6 +211,10 @@ class AgentRuntime(ABC):
                 self.terminal_session_name, capture_output=True,
             )
             self.failed_pane_id = None
+
+    def conversation_files(self) -> tuple[Path, ...]:
+        """Return materialized native transcripts belonging to this member, if the backend exposes them."""
+        return ()
 
     def get_agent_file_path(self, suffix: str) -> Path:
         """Keep group and member names distinct even on case-insensitive filesystems."""

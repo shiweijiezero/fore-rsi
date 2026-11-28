@@ -1,0 +1,17 @@
+{#
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
+#}
+
+Review the experiment for item {{ exploration_item.exploration_id }}, **{{ exploration_item.name }}**, against the task in `{{ task_file }}`. The measured checkout is `{{ exploration_item.code_workspace_path }}`; the working record is `{{ exploration_record_path }}`.
+
+Experiment result:
+{{ exploration_item.experiment_result }}
+
+{% if feedback %}
+The Checker declined the request to finish: {{ feedback }}
+Reconsider the next step in light of this feedback and the recorded result.
+{% else %}
+Compare the reported measurements, workloads and quality with the relevant parent and baseline. Consult the referenced artifacts when you need more detail. Add your interpretation to the working record, including failed runs, regressions and uncertainty where they affect the conclusion. Keep the measured checkout unchanged during analysis.
+{% endif %}
+Use `{{ tool }}` to choose the next step. `continue_exploration` starts a new round with this item as a direct parent; `start_new_round` leaves the direction and parents open. Choose `finish` to ask the Checker to end this group's work. Explain your choice and whether the measured checkout should be published as a fixed starting point.

@@ -15,15 +15,24 @@ from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 
 from fore_rsi.config import AgentConfig, ReasoningEffort
-from fore_rsi.rsi_workflows.agent_runtimes.base_runtime import AgentRuntime, MessageDeliveryMode
+from fore_rsi.rsi_workflows.agent_runtimes.base_runtime import (
+    AgentRuntime,
+    MessageDeliveryMode,
+)
 from fore_rsi.rsi_workflows.agent_runtimes.claude_code.record_file import (
     bind_session_transcript,
+    fork_claude_session,
     get_claude_project_link,
     prepare_claude_session,
     remove_project_link,
+    session_directory,
 )
 from fore_rsi.rsi_workflows.agent_runtimes.installation import get_or_install_cli
-from fore_rsi.rsi_workflows.agent_runtimes.tool_mcp import AgentTool, ToolMcpHost, create_tool_mcp
+from fore_rsi.rsi_workflows.agent_runtimes.tool_mcp import (
+    AgentTool,
+    ToolMcpHost,
+    create_tool_mcp,
+)
 from fore_rsi.utils.paths import write_private_text
 from fore_rsi.utils.terminal import PaneLocation
 
@@ -66,6 +75,17 @@ class ClaudeCodeAgentRuntime(AgentRuntime):
         self.active_turn: str | None = None
         self.workflow_turn: str | None = None
         self.failure: str | None = None
+
+    def conversation_files(self) -> tuple[Path, ...]:
+        """Locate the transcript under the member's workflow-owned Claude project."""
+        if self.conversation_id is None:
+            return ()
+        path = session_directory(self.get_agent_file_path("")) / f"{self.conversation_id}.jsonl"
+        return (path.resolve(),) if path.is_file() else ()
+
+    async def fork_from(self, seed: AgentRuntime) -> None:
+        """Prepare the child TUI to fork the seed's transcript with its own UUID and tool endpoint."""
+        fork_claude_session(seed.get_agent_file_path(""), self.get_agent_file_path(""))
 
     async def wait_for_agent_ready(self, pane: PaneLocation, agent: dict[str, object]) -> dict[str, object]:
         """Require both the visible TUI and its input channel before publishing readiness."""
@@ -204,14 +224,14 @@ class ClaudeCodeAgentRuntime(AgentRuntime):
     ) -> list[str]:
         """Bind the session, its turn plugin and role tools without replacing the user's Claude profile."""
         profile = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude").expanduser().resolve()
-        self.profile_environment, flag, self.conversation_id = prepare_claude_session(
+        self.profile_environment, session_arguments, self.conversation_id = prepare_claude_session(
             self.get_agent_file_path(""), profile
         )
         url = self.tool_mcp_host.tool_endpoints[self.tool_mcp].url.rsplit("/", 1)[0] + "/turn"
         hooks = {"PermissionRequest": [{"hooks": [{"type": "http", "url": url}]}]}
         options = [
-            flag,
-            self.conversation_id,
+            *session_arguments,
+            "--name", self.session_display_name,
             "--plugin-dir",
             str(Path(__file__).with_name("turn_events")),
             "--settings",
@@ -255,7 +275,7 @@ class ClaudeCodeAgentRuntime(AgentRuntime):
         for record in claude_directory.glob("member-*.session"):
             binding = json.loads(record.read_bytes())
             conversation = str(binding["id"])
-            project_directory = claude_directory / "projects" / "agents" / record.stem
+            project_directory = session_directory(record)
             if "native_profile" not in binding:
                 profile = Path(binding.get("profile") or binding["home"])
                 remove_project_link(get_claude_project_link(profile, conversation), project_directory)

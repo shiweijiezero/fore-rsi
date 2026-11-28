@@ -3,37 +3,53 @@
 
 """Accept task submissions from the Coordinator and keep a revision history for each workflow session."""
 
+import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 
 from fore_rsi.rsi_workflows.types import RequiredText
 from fore_rsi.rsi_workflows.workflow_runtimes.agent_scheduler import AgentAllocation
 
 
+class ExperimentResources(BaseModel):
+    """Total measurement budget and the individual resources the team can divide among its members."""
+
+    model_config = ConfigDict(extra="allow", strict=True)
+    units: dict[RequiredText, RequiredText] = Field(default_factory=dict, description=(
+        "Map each independently assignable resource to its scope, using one stable ID per unit across the team. "
+        "Derive units from the machine description, not from team size: eight GPUs on one host give eight "
+        "device slots, not three preassigned environments. Keep shared limits here as part of the total budget. "
+        "If no independent units are known, the team shares one exclusive allocation."
+    ))
+
+
 class Resource(BaseModel):
     """Declared resource budgets for deployment and the complete experiment set."""
 
-    deployment_resources: dict[str, object] = Field(default_factory=dict)
-    experiment_resources: dict[str, object] = Field(default_factory=dict)
+    deployment_resources: dict[str, object]
+    experiment_resources: ExperimentResources
 
 
 class TaskConstraints(BaseModel):
     """Task constraints grouped by their purpose."""
 
-    common_constraints: dict[str, object] = Field(default_factory=dict)
-    resources: Resource = Field(default_factory=Resource)
-    stop_conditions: list[str] = Field(default_factory=list)
-    time_budget: int | float | None = None
+    common_constraints: dict[str, object]
+    resources: Resource
+    stop_conditions: list[str]
+    time_budget: int | float | None
 
 
 class AgentTeam(BaseModel):
     """Role allocations and collaboration notes requested for the task's Agent team."""
 
-    roles: dict[RequiredText, list[AgentAllocation]] = Field(default_factory=dict)
-    team_comments: list[str] = Field(default_factory=list)
-    watchdog_interval_seconds: float = Field(default=3600, gt=0, allow_inf_nan=False)
+    roles: dict[RequiredText, list[AgentAllocation]]
+    watchdog_interval_seconds: PositiveInt | None = Field(description=(
+        "Seconds between Watchdog progress reviews. Use a positive interval when the Watchdog is enabled; "
+        "null is allowed when the role is absent or paused."
+    ))
+    team_comments: list[str]
 
 
 class TaskSubmission(BaseModel):
@@ -43,13 +59,12 @@ class TaskSubmission(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     goal: RequiredText = Field(description="What the task should achieve.")
-    constraints: TaskConstraints = Field(default_factory=TaskConstraints)
-    agent_team: AgentTeam = Field(default_factory=AgentTeam)
+    constraints: TaskConstraints
+    agent_team: AgentTeam
     environment_variables: dict[RequiredText, str] = Field(
-        default_factory=dict,
-        description="Environment variable names and values required by the task.",
+        description="Environment variable names and values required by the task."
     )
-    task_comments: list[str] = Field(default_factory=list)
+    task_comments: list[str]
 
 
 @dataclass(frozen=True)
@@ -68,6 +83,7 @@ class Task:
         """Create task history state for one new workflow session."""
         self.session_directory = session_directory
         self.task_revisions: list[TaskRevision] = []
+        self.revision_changed = asyncio.Event()
 
     @property
     def current_task(self) -> TaskRevision | None:
@@ -81,6 +97,8 @@ class Task:
             return current
         revision = self.write_task_revision(len(self.task_revisions) + 1, task_submission)
         self.task_revisions.append(revision)
+        self.revision_changed.set()
+        self.revision_changed = asyncio.Event()
         return revision
 
     def write_task_revision(

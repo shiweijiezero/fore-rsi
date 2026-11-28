@@ -3,18 +3,10 @@ SPDX-License-Identifier: Apache-2.0
 SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
 #}
 
-## Exploration review
+Is this item ready for the Experimenter?
 
-Review the following candidate for readiness to enter the experiment stage.
+{{ exploration_item }}
 
-- Current candidate: {{ candidate }}
-- Code or proposal path: `{{ code_path }}`
-{% if parent_node is not none %}
-- Parent node: {{ parent_node }}
-{% else %}
-- Parent node: none; this is a baseline candidate.
-{% endif %}
+Read the Explorer's working record at `{{ exploration_record_path }}` and inspect the referenced checkout. Check that the change implements the approved direction, that the experiment commands can run against that checkout, and that the comparison will answer the question within the task's constraints. Readiness to measure does not require a measured improvement.
 
-- Inspect the candidate's code or proposal and assess how it addresses the claimed bottleneck. Consider expected benefit, implementation complexity, and resource cost.
-- Check correctness, task constraints, and relevant regressions. For a proposal, assess whether the procedure, baseline, and evaluation criteria are concrete enough to execute. Verify that the supplied artifacts and instructions are sufficient to reproduce the planned experiment.
-- Distinguish readiness to test from demonstrated improvement. State the checks performed, blocking issues, and assumptions the experiment should test. Identify any missing candidate artifacts needed to run the experiment.
+Submit your decision and its supporting evidence with `{{ tool }}`.

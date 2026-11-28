@@ -15,7 +15,7 @@
 
 ## Agent team
 
-4 Explorers, 4 Workers, 2 Experimenters.
+4 Explorers, 4 Checkers, up to 2 Experimenters.
 
 ## Deployment and measurement
 

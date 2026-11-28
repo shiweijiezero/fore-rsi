@@ -32,6 +32,28 @@ def remove_project_link(link: Path, target: Path) -> None:
         link.unlink()
 
 
+def session_directory(member: Path) -> Path:
+    """Locate the workflow-owned Claude project directory for one member."""
+    return member.parent / "projects" / "agents" / member.stem
+
+
+def fork_claude_session(seed: Path, child: Path) -> None:
+    """Bind a new member UUID to a native fork of the seed's exact transcript on first launch."""
+    source = json.loads(seed.with_suffix(".session").read_bytes())
+    transcript = session_directory(seed) / f"{UUID(source['id'])}.jsonl"
+    if not transcript.is_file():
+        raise FileNotFoundError(f"Claude seed has no saved conversation: {transcript}")
+    record = child.with_suffix(".session")
+    if record.exists():
+        raise FileExistsError(f"Claude member already has a session: {record}")
+
+    # Claude may write the fork before the session-start hook. Route its entire project
+    # directory to the child from launch, rather than linking a transcript after that write.
+    profile = source.get("native_profile") or source.get("profile") or source["home"]
+    binding = {"id": str(uuid4()), "profile": profile, "fork_transcript": str(transcript.resolve())}
+    write_private_text(record, json.dumps(binding))
+
+
 def bind_session_transcript(member: Path, native: Path) -> None:
     """Link the native per-session filename to the member record when using Claude's default profile."""
     record = member.with_suffix(".session")
@@ -39,7 +61,7 @@ def bind_session_transcript(member: Path, native: Path) -> None:
     conversation = str(UUID(binding["id"]))
     profile = binding.get("native_profile") or binding.get("profile") or binding["home"]
     projects = Path(profile) / "projects"
-    directory = member.parent / "projects" / "agents" / member.name
+    directory = session_directory(member)
     owned = directory / f"{conversation}.jsonl"
     if native.resolve() == owned.resolve():
         return
@@ -53,10 +75,10 @@ def bind_session_transcript(member: Path, native: Path) -> None:
     write_private_text(record, json.dumps(binding))
 
 
-def prepare_claude_session(member: Path, profile: Path) -> tuple[dict[str, str], str, str]:
-    """Preserve the member UUID and reuse the profile where its conversation was created."""
+def prepare_claude_session(member: Path, profile: Path) -> tuple[dict[str, str], list[str], str]:
+    """Return the profile, native launch arguments and UUID for a fresh, forked or resumed member."""
     record = member.with_suffix(".session")
-    directory = member.parent / "projects" / "agents" / member.name
+    directory = session_directory(member)
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     try:
         binding = json.loads(record.read_bytes())
@@ -67,10 +89,18 @@ def prepare_claude_session(member: Path, profile: Path) -> tuple[dict[str, str],
     conversation = str(UUID(binding["id"]))
     environment = {}
     if "native_profile" not in binding:
-        # Existing members keep their project-directory alias and resume settings.
-        previous = Path(binding.get("profile") or binding["home"])
-        alias = get_claude_project_link(previous, conversation)
+        profile = Path(binding.get("profile") or binding["home"])
+        alias = get_claude_project_link(profile, conversation)
         link_project_directory(alias, directory)
-        environment = {"CLAUDE_CONFIG_DIR": str(previous), "CLAUDE_CODE_PROJECT_DIR_NAME": alias.name}
-    flag = "--resume" if (directory / f"{conversation}.jsonl").is_file() else "--session-id"
-    return environment, flag, conversation
+        environment = {"CLAUDE_CONFIG_DIR": str(profile), "CLAUDE_CODE_PROJECT_DIR_NAME": alias.name}
+
+    if (directory / f"{conversation}.jsonl").is_file():
+        arguments = ["--resume", conversation]
+    elif "fork_transcript" in binding:
+        arguments = ["--resume", binding["fork_transcript"], "--fork-session", "--session-id", conversation]
+    else:
+        arguments = ["--session-id", conversation]
+    if "fork_transcript" in binding:
+        # Apply the child's role instructions rather than replaying the seed's saved system prompt.
+        arguments.extend(["--system-prompt-snapshot", "off"])
+    return environment, arguments, conversation
