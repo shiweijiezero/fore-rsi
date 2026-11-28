@@ -1,0 +1,15 @@
+{#
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
+#}
+
+Prepare the starting code for the task in `{{ task_file }}`. Use the checkout specified by the task if it already contains the requested version. For a new checkout, use a directory based on the exploration item's name under `{{ code_directory }}`. Verify the source files and starting revision before registering the item. Do not modify the baseline or run an experiment.
+
+Call `{{ tool }}` to register the baseline:
+
+- `name`: name the framework or component and the configuration being used as the baseline.
+- `description`: briefly identify the source revision, configuration and what later directions will compare against.
+- `parent_exploration_ids`: `[]` because this is the starting point.
+- `code_workspace_path`: the absolute path to the prepared source directory.
+
+After submission, write the baseline record to the returned `exploration_record_path` before finishing this turn. Describe how to reproduce the starting point: where the source came from, the checked-out revision and any local changes, the relevant settings, and how the workspace was prepared. Give the next Explorer enough detail to use the checkout without this conversation.

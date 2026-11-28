@@ -1,48 +1,36 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
 
-"""Explorer role and workflow stages for the default collaboration workflow."""
+"""Explorer conversations for preparing the baseline, implementing a direction and analyzing its results."""
 
-from asyncio import Queue
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from fore_rsi.config import AgentConfig
-from fore_rsi.rsi_workflows.agent_runtimes.tool_mcp import register_agent_tool
+from fore_rsi.rsi_workflows.agent_runtimes.tool_mcp import (
+    AgentTool,
+    register_agent_tool,
+)
 from fore_rsi.rsi_workflows.base_agent import BaseAgent, ExpectedToolCalls
 from fore_rsi.rsi_workflows.workflow_runtimes.workgroup import Workgroup
 from fore_rsi.utils.prompt_renderer import merge_prompts, render_prompt
 
-from .tools import ExplorationSubmission, submit_exploration
+from .tools import (
+    NextAction,
+    submit_exploration_item,
+    submit_exploration_update,
+    submit_next_action,
+)
 
 if TYPE_CHECKING:
     from fore_rsi.rsi_workflows.custom_workflows.default.workflow import DefaultWorkflow
 
 
 class ExplorerAgent(BaseAgent):
-    """Explore approaches for the default workflow's task."""
+    """Own one Explorer conversation; the workflow and the pool own the resulting items."""
 
     role_name = "Explorer"
-    exploration_tools = ExpectedToolCalls(
-        step="exploration", tools=frozenset({submit_exploration.__name__})
-    )
-    common_system_prompt_path = (
-        Path(__file__).resolve().parents[2]
-        / "prompts" / "common" / "system.j2"
-    )
-    common_user_prompt_path = (
-        Path(__file__).resolve().parents[2]
-        / "prompts" / "common" / "user.j2"
-    )
-    system_prompt_path = (
-        Path(__file__).resolve().parents[2]
-        / "prompts" / "explorer" / "system.j2"
-    )
-    exploration_prompt_path = (
-        Path(__file__).resolve().parents[2]
-        / "prompts" / "explorer" / "exploration.j2"
-    )
-
+    prompts_dir = Path(__file__).resolve().parents[2] / "prompts"
 
     def __init__(
         self,
@@ -52,69 +40,105 @@ class ExplorerAgent(BaseAgent):
         *,
         workflow: "DefaultWorkflow",
     ) -> None:
-        """Bind the Explorer's tools and instructions to this workflow session."""
-        self.exploration_submission_queue: Queue[tuple[str, ExplorationSubmission]] = Queue()
-        submit_exploration_tool = register_agent_tool(
-            submit_exploration, record_submission=self.record_exploration_submission
+        """Bind the role's MCP tools to this member, not to the seed or another workgroup."""
+        self.workflow = workflow
+        self.code_directory = (workflow.session_directory / "code").resolve()
+        self.current_exploration_item_id: str | None = None
+        self.required_parent_exploration_id: str | None = None
+        self.next_action: tuple[NextAction, str, bool] | None = None
+        tools = (
+            submit_exploration_item,
+            submit_exploration_update,
+            submit_next_action,
         )
         super().__init__(
             agent_name,
             workgroup,
             agent_config,
             workflow=workflow,
-            tools=[submit_exploration_tool],
+            tools=[register_agent_tool(tool, explorer=self) for tool in tools],
         )
-        prompt_context = {
-            "role_name": self.role_name,
-            "agent_name": self.agent_name,
-            "workgroup_name": self.workgroup.workgroup_name,
-        }
         self.system_prompt = merge_prompts(
             [
-                render_prompt(self.common_system_prompt_path),
-                render_prompt(self.system_prompt_path, prompt_context),
-            ]
-        )
-
-    def record_exploration_submission(
-        self, attempt_id: str, submission: ExplorationSubmission
-    ) -> None:
-        """Keep the submitted attempt and artifacts for the subflow to consume."""
-        self.exploration_submission_queue.put_nowait((attempt_id, submission))
-
-    @staticmethod
-    async def exploration(workflow_state: dict[str, object]) -> None:
-        """Send the confirmed direction and feedback to the Explorer."""
-        explorer = cast(ExplorerAgent, workflow_state["agent"])
-
-        feedback = workflow_state.get("feedback_for_exploration")
-
-        feedback_type = None
-        feedback_content = None
-
-        if feedback is not None:
-            if not isinstance(feedback, dict):
-                raise ValueError("feedback_for_exploration must be a dictionary.")
-
-            feedback_type = feedback.get("type")
-            feedback_content = feedback.get("content")
-
-        prompt_context = {
-            "feedback_type": feedback_type,
-            "feedback_content": feedback_content,
-        }
-
-        user_prompt = merge_prompts(
-            [
-                render_prompt(ExplorerAgent.common_user_prompt_path),
+                render_prompt(self.prompts_dir / "common/system.j2"),
                 render_prompt(
-                    ExplorerAgent.exploration_prompt_path,
-                    prompt_context,
+                    self.prompts_dir / "explorer/system.j2",
+                    {
+                        "exploration_database": workflow.exploration_pool.database_path.resolve(),
+                    },
                 ),
             ]
         )
 
-        await explorer.send_message(
-            user_prompt,
-            expected_tool_calls=explorer.exploration_tools,
+    async def study_framework(self, task_file: Path) -> None:
+        """Read the task and its framework in the seed conversation before preparing shared code."""
+        prompt = merge_prompts(
+            [
+                render_prompt(self.prompts_dir / "common/user.j2"),
+                render_prompt(self.prompts_dir / "explorer/study_framework.j2", {"task_file": task_file}),
+            ]
+        )
+        await self.send_message(prompt)
+        await self.wait_for_settle()
+
+    async def prepare_baseline(self) -> None:
+        """Register the team's read-only starting checkout and leave its record for the forked Explorers."""
+        self.code_directory.mkdir(parents=True, exist_ok=True)
+        if not await self.request_step("prepare_baseline", submit_exploration_item):
+            raise RuntimeError(f"{self.agent_name} did not register the baseline.")
+        assert self.current_exploration_item_id is not None
+        exploration_record_path = self.workflow.exploration_pool.exploration_record_path(self.current_exploration_item_id)
+        if not exploration_record_path.read_text(encoding="utf-8").strip():
+            raise RuntimeError(f"The baseline has no source or configuration notes in {exploration_record_path}.")
+
+    async def propose_direction(self, feedback: str | None, required_parent_exploration_id: str | None) -> str | None:
+        """Submit a new item for review; a continuation must name the measured item as a direct parent."""
+        self.current_exploration_item_id = None
+        self.required_parent_exploration_id = required_parent_exploration_id
+        if await self.request_step(
+            "select_direction", submit_exploration_item, exploration_item_id=required_parent_exploration_id, feedback=feedback,
+        ):
+            return self.current_exploration_item_id
+        return None
+
+    async def explore_item(self, exploration_item_id: str, feedback: str | None) -> bool:
+        """Implement or revise the item in its claimed checkout and submit its experiment commands for review."""
+        self.current_exploration_item_id = exploration_item_id
+        return await self.request_step(
+            "exploration", submit_exploration_update, feedback=feedback, exploration_item_id=exploration_item_id
+        )
+
+    async def analyse_experiment_result(
+        self, exploration_item_id: str, feedback: str | None
+    ) -> tuple[NextAction, str, bool] | None:
+        """Ask the Explorer to interpret the report and submit its next action in the same turn."""
+        self.next_action = None
+        if await self.request_step(
+            "analyse_experiment_result", submit_next_action, exploration_item_id=exploration_item_id, feedback=feedback,
+        ):
+            return self.next_action
+        return None
+
+    async def request_step(
+        self, step: str, tool: AgentTool, *, exploration_item_id: str | None = None, **context: object
+    ) -> bool:
+        """Give the current task and, on resumed work, the original item's record to this prompt."""
+        revision = self.workflow.task.current_task
+        assert revision is not None  # The Coordinator publishes a task before starting the team.
+        name = tool.__name__
+        context.update(task_file=revision.revision_file_path.resolve(), code_directory=self.code_directory, tool=name)
+        if exploration_item_id is not None:
+            exploration_pool = self.workflow.exploration_pool
+            exploration_item = exploration_pool.get(exploration_item_id)
+            context.update(
+                exploration_item=exploration_item,
+                exploration_record_path=exploration_pool.exploration_record_path(
+                    exploration_item_id, name=exploration_item.name,
+                ),
+            )
+        prompt = render_prompt(self.prompts_dir / "explorer" / f"{step}.j2", context)
+        expected = ExpectedToolCalls(step=step, tools=frozenset({name}))
+        return await self.request_submission(
+            prompt, expected,
+            retry_prompt=f"Continue the previous step. Submit with `{name}` and finish its requested working notes.",
         )

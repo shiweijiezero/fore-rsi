@@ -1,38 +1,45 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
 
-"""Display a session's exploration graph and selected exploration."""
+"""Explore a session’s exploration lineage and the publication history of its Watchdog reports."""
 
 import asyncio
 import os
 from pathlib import Path
-from urllib.parse import quote
+from typing import ClassVar
 
-from rich.console import Console, Group
 from rich.style import Style
-from rich.table import Table
 from rich.text import Text
 from textual import events, on
 from textual.app import App, ComposeResult
-from textual.binding import Binding
+from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widgets import Button, Footer, Static, Tab, Tabs
+from textual.widgets import Button, Footer, OptionList, Static, Tab, Tabs
+from textual.widgets.option_list import Option
 
-from fore_rsi.rsi_workflows.workflow_runtimes.exploration_pool import ExplorationItem, ExplorationPool
-from .exploration_graph import COLORS, STATUS, ExplorationGraph
+from fore_rsi.rsi_workflows.workflow_runtimes.exploration_pool import (
+    ExplorationItem,
+    ExplorationPool,
+)
+from fore_rsi.rsi_workflows.workflow_runtimes.watchdog_reports import WatchdogReports
 
+from .details import ProgressDetails
+from .exploration_graph import STATUS_STYLES, ExplorationGraph
 
-STATUS_LABELS = dict(zip(STATUS, ["待确认", "探索中", "待实验", "实验中", "已终止", "已成熟"], strict=True))
 TRANSLATIONS = {
     "ForeRSI / 工作进展": "ForeRSI / Work progress",
-    "探索演进图": "Exploration graph",
     "暂无可显示的探索节点": "No explorations to display",
+    "探索图": "Explorations",
+    "巡查报告": "Watchdog reports",
+    "无法读取文件": "Cannot read file",
+    "正在读取报告…": "Loading report…",
     "概览": "Overview",
     "实验": "Experiments",
     "探索记录": "Exploration log",
     "父节点": "Parents",
     "实验结果": "Experiment result",
     "任务版本": "Task revision",
+    "代码工作区": "Code workspace",
     "暂无实验结果": "No experiment result yet",
     "暂无探索记录": "No exploration log yet",
     "外部引用": "External reference",
@@ -43,7 +50,10 @@ TRANSLATIONS = {
     "收起/展开详情": "Toggle details",
     "查看详情": "View details",
     "退出": "Quit",
-    **{label: status.replace("_", " ").capitalize() for status, label in STATUS_LABELS.items()},
+    **{
+        label: status.replace("_", " ").capitalize()
+        for status, (label, _) in STATUS_STYLES.items()
+    },
 }
 
 
@@ -57,8 +67,7 @@ class ProgressDivider(Static):
         self.dragging = False
 
     def render(self) -> Text:
-        corner = "└" if self.disabled else "├"
-        return Text(corner + "─" * max(0, self.size.width - 1))
+        return Text("─" * self.size.width)
 
     def on_mouse_down(self, event: events.MouseDown) -> None:
         if event.button == 1:
@@ -94,61 +103,64 @@ class ProgressFooter(Footer):
 
 
 class WorkProgressApp(App[None]):
+    """Select a node in either graph to read its session-local evidence."""
+
     ENABLE_COMMAND_PALETTE = False
-    BINDINGS = [("f", "filter", "切换过滤"), ("d", "toggle_details", "收起/展开详情"),
-                ("q", "quit", "退出"), Binding("escape", "quit", show=False)]
+    BINDINGS: ClassVar[list[BindingType]] = [
+        ("f", "filter", "切换过滤"),
+        ("d", "toggle_details", "收起/展开详情"),
+        ("q", "quit", "退出"),
+        Binding("escape", "quit", show=False),
+    ]
 
     CSS = """
-    Screen { background: #090e11; color: #dbe3e5; }
+    Screen { background: $background; color: $text; }
     #masthead { height: 1; padding: 0 1; }
-    #brand { width: 1fr; color: #ecf5f6; text-style: bold; }
-    #toggle-language { height: 1; width: auto; min-width: 8; border: none; padding: 0 1; background: #10191e; color: #82e3e7; }
+    #brand { width: 1fr; text-style: bold; }
+    #toggle-language, #toggle-details { height: 1; border: none; background: $background; color: $primary; }
+    #toggle-language { width: auto; min-width: 8; padding: 0 1; }
+    #toggle-details { width: 3; min-width: 3; padding: 0; }
     #progress-panels { height: 1fr; }
-    #lineage, #details { border: solid #475359; padding: 0 1; height: 1fr; }
-    #lineage { border-bottom: none; }
-    #details { border-top: none; }
+    #graphs, #details { height: 1fr; }
+    #lineage { width: 2fr; padding: 0 1; }
+    #report-history { width: 1fr; padding: 0 1; border-left: solid $panel; }
+    #report-chain { height: 1fr; background: $background; }
+    #reports-title, #explorations-title { height: 1; text-style: bold; }
+    #details { padding: 0 1; }
     #panel-divider { height: 1; }
-    #resize-handle { height: 1; width: 1fr; color: #475359; }
-    #resize-handle:hover { color: #82e3e7; }
-    #toggle-details { height: 1; width: 3; min-width: 3; border: none; padding: 0; background: #090e11; color: #82e3e7; }
-    #divider-end { height: 1; width: 1; color: #475359; }
-    .heading { height: 1; text-style: bold; color: #82e3e7; }
-    #legend { height: auto; text-align: right; }
-    #empty { height: 1fr; content-align: center middle; color: #98a6aa; }
+    #resize-handle { height: 1; width: 1fr; color: $text-muted; }
+    #resize-handle:hover { color: $primary; }
+    #divider-end { height: 1; width: 1; color: $text-muted; }
+    #legend { height: auto; }
+    #empty { height: 1fr; content-align: center middle; color: $text-muted; }
     #detail-bar { height: 2; }
+    #details.-report #detail-bar { height: 1; }
+    #details.-report #detail-name { max-width: 100%; }
     #detail-tabs { height: 2; width: 1fr; }
     #detail-name { width: auto; max-width: 40%; height: 1; padding-right: 2; text-style: bold; text-overflow: ellipsis; text-wrap: nowrap; }
-    #detail-parents { width: auto; max-width: 35%; height: 1; padding-left: 2; text-align: right; color: #98a6aa; text-overflow: ellipsis; text-wrap: nowrap; }
+    #detail-parents { width: auto; max-width: 35%; height: 1; padding-left: 2; text-align: right; color: $text-muted; text-overflow: ellipsis; text-wrap: nowrap; }
     Tab { height: 1; padding: 0 1; }
-    Tab.-active { color: #72e2e8; text-style: bold; }
-    #detail-tabs .underline--bar { color: #61dce5; background: #090e11; }
-    Footer { background: #10191e; }
+    Tab.-active { color: $primary; text-style: bold; }
+    #detail-tabs .underline--bar { color: $primary; background: $background; }
     """
 
     def __init__(self, session_directory: Path, *, embedded: bool = False) -> None:
-        # Status colors remain meaningful even in a shell that sets NO_COLOR.
-        no_color = os.environ.pop("NO_COLOR", None)
-        try:
-            super().__init__()
-        finally:
-            if no_color is not None:
-                os.environ["NO_COLOR"] = no_color
-        self.console = Console(
-            color_system="truecolor", file=self.console.file, no_color=False,
-            force_terminal=True, highlight=False, emoji=False, legacy_windows=False,
-            safe_box=False, soft_wrap=False,
+        # ANSI surfaces use the terminal's actual foreground and background in both light and dark profiles.
+        super().__init__(
+            ansi_color=True if not os.environ.get("TEXTUAL_THEME") else None
         )
-        self.workspace = Path.cwd()
-        self.pool = ExplorationPool(self.workspace)
-        self.session_name = session_directory.name
+        if not os.environ.get("TEXTUAL_THEME"):
+            self.theme = "ansi-dark"
+        self.pool = ExplorationPool(session_directory, read_only=True)
+        self.pool_changes = self.pool.changes()
+        self.watchdog_reports = WatchdogReports(session_directory)
+        self.report_paths: list[Path] = []
         self.language = "zh"
         self.embedded = embedded
         self.last_filter = "retired"
         self.hidden_status = None
-        self.items = None
-        self.selected = None
-        self.record = ""
-        self.tab = "overview-tab"
+        self.items: list[ExplorationItem] = []
+        self.selected: ExplorationItem | Path | None = None
         self.details_visible = True
         self.split_ratio = 0.5
 
@@ -160,26 +172,25 @@ class WorkProgressApp(App[None]):
             yield Static(self.tr("ForeRSI / 工作进展"), id="brand")
             yield Button("English", id="toggle-language", tooltip=self.tr("切换语言"))
         with ProgressPanels(id="progress-panels"):
-            with Vertical(id="lineage"):
-                yield Static("▎" + self.tr("探索演进图"), id="graph-heading", classes="heading")
-                legend = Static(self.legend(), id="legend")
-                # Keep click actions without automatic link colors and underlines.
-                legend.auto_links = False
-                yield legend
-                yield Static(self.tr("暂无可显示的探索节点"), id="empty")
-                yield ExplorationGraph()
+            with Horizontal(id="graphs"):
+                with Vertical(id="lineage"):
+                    yield Static(self.tr("探索图"), id="explorations-title")
+                    legend = Static(self.legend(), id="legend")
+                    # Preserve the status filter actions without automatic link styling.
+                    legend.auto_links = False
+                    yield legend
+                    yield Static(self.tr("暂无可显示的探索节点"), id="empty")
+                    yield ExplorationGraph()
+                with Vertical(id="report-history"):
+                    yield Static(self.tr("巡查报告"), id="reports-title")
+                    yield OptionList(id="report-chain", compact=True)
             with Horizontal(id="panel-divider"):
                 yield ProgressDivider()
-                yield Button("─▼─", id="toggle-details", tooltip=self.tr("收起详情（D）"))
+                yield Button(
+                    "─▼─", id="toggle-details", tooltip=self.tr("收起详情（D）")
+                )
                 yield Static("┤", id="divider-end")
-            with Vertical(id="details"):
-                with Horizontal(id="detail-bar"):
-                    yield Static(id="detail-name", markup=False)
-                    yield Tabs(Tab(self.tr("概览"), id="overview-tab"), Tab(self.tr("实验"), id="experiment"),
-                               Tab(self.tr("探索记录"), id="record"), id="detail-tabs")
-                    yield Static(id="detail-parents", markup=False)
-                with VerticalScroll(id="detail-scroll"):
-                    yield Static(id="body", markup=False)
+            yield ProgressDetails()
         yield ProgressFooter()
 
     @on(Button.Pressed, "#toggle-language")
@@ -189,11 +200,15 @@ class WorkProgressApp(App[None]):
         button.label = "中文" if self.language == "en" else "English"
         button.tooltip = self.tr("切换语言")
         self.query_one("#brand", Static).update(self.tr("ForeRSI / 工作进展"))
-        self.query_one("#graph-heading", Static).update("▎" + self.tr("探索演进图"))
+        self.query_one("#explorations-title", Static).update(self.tr("探索图"))
+        self.query_one("#reports-title", Static).update(self.tr("巡查报告"))
         self.query_one("#empty", Static).update(self.tr("暂无可显示的探索节点"))
-        for tab_id, label in (("overview-tab", "概览"), ("experiment", "实验"), ("record", "探索记录")):
+        for tab_id, label in (
+            ("overview-tab", "概览"),
+            ("experiment", "实验"),
+            ("record", "探索记录"),
+        ):
             self.query_one(f"#{tab_id}", Tab).label = self.tr(label)
-        self.query_one("#legend", Static).update(self.legend())
         self.query_one("#toggle-details", Button).tooltip = self.tr(
             "收起详情（D）" if self.details_visible else "展开详情（D）"
         )
@@ -202,143 +217,213 @@ class WorkProgressApp(App[None]):
 
     async def on_mount(self) -> None:
         self.graph = self.query_one(ExplorationGraph)
+        self.report_chain = self.query_one("#report-chain", OptionList)
+        self.details = self.query_one(ProgressDetails)
         await self.refresh_items()
-        if self.items:
-            self.graph.focus()
-        self.set_interval(1, self.refresh_items)
+        if self.selected is not None:
+            (
+                self.report_chain if isinstance(self.selected, Path) else self.graph
+            ).focus()
+        self.set_interval(3, self.refresh_items)
         self.call_after_refresh(self.apply_split)
+
+    def on_unmount(self) -> None:
+        """Release the viewer's SQLite change observer."""
+        self.pool_changes.close()
 
     def apply_split(self) -> None:
         panels = self.query_one("#progress-panels")
-        available = max(0, panels.content_size.height - 1)
+        has_selection = self.selected is not None
+        self.query_one("#panel-divider").display = has_selection
+        details = self.query_one("#details")
+        details.display = has_selection and self.details_visible
+        available = max(0, panels.content_size.height - int(has_selection))
         if not available:
             return
-        lineage = self.query_one("#lineage")
-        details = self.query_one("#details")
-        details.display = self.details_visible
-        if self.details_visible:
+        graphs = self.query_one("#graphs")
+        if details.display:
             minimum = min(6, available // 2)
-            upper = max(minimum, min(available - minimum, round(available * self.split_ratio)))
-            lineage.styles.height = upper
+            upper = max(
+                minimum, min(available - minimum, round(available * self.split_ratio))
+            )
+            graphs.styles.height = upper
             details.styles.height = available - upper
         else:
-            lineage.styles.height = available
+            graphs.styles.height = available
 
     def resize_panels(self, screen_y: int) -> None:
         if self.details_visible:
             panels = self.query_one("#progress-panels")
             available = max(1, panels.content_size.height - 1)
             minimum = min(6, available // 2)
-            upper = max(minimum, min(available - minimum, screen_y - panels.content_region.y))
+            upper = max(
+                minimum, min(available - minimum, screen_y - panels.content_region.y)
+            )
             self.split_ratio = upper / available
             self.apply_split()
 
     @on(Button.Pressed, "#toggle-details")
-    def action_toggle_details(self) -> None:
+    async def action_toggle_details(self) -> None:
+        """Reopen the selected node with its latest notes, or return focus to its graph."""
         self.details_visible = not self.details_visible
         button = self.query_one("#toggle-details", Button)
         button.label = "─▼─" if self.details_visible else "─▲─"
-        button.tooltip = self.tr("收起详情（D）" if self.details_visible else "展开详情（D）")
-        self.query_one("#divider-end", Static).update("┤" if self.details_visible else "┘")
+        button.tooltip = self.tr(
+            "收起详情（D）" if self.details_visible else "展开详情（D）"
+        )
+        self.query_one("#divider-end", Static).update(
+            "┤" if self.details_visible else "┘"
+        )
         self.query_one(ProgressDivider).disabled = not self.details_visible
         self.apply_split()
-        if not self.details_visible:
-            self.graph.focus()
+        if self.details_visible:
+            await self.details.refresh_file()
+        else:
+            (
+                self.report_chain if isinstance(self.selected, Path) else self.graph
+            ).focus()
 
     async def refresh_items(self) -> None:
-        items = await asyncio.to_thread(self.pool.list)
-        if items != self.items:
-            self.items = items
+        """Refresh both histories independently; new reports must not steal the current selection."""
+        changed = next(self.pool_changes)
+        if changed:
+            self.items = await asyncio.to_thread(self.pool.list)
+        paths = await asyncio.to_thread(self.watchdog_reports.list)
+        if paths != self.report_paths:
+            # Textual provides cursor navigation, hit testing and scrolling. Each option is a node;
+            # a fixed arrow before every node except the root connects them in publication order.
+            start = len(self.report_paths)
+            if paths[:start] != self.report_paths:
+                self.report_chain.clear_options()
+                start = 0
+            self.report_chain.add_options(
+                Option(
+                    Text(
+                        ("↓\n" if i else "") + f"● #{i + 1}  {path.name}",
+                        no_wrap=True,
+                        overflow="ellipsis",
+                    ),
+                    id=str(path),
+                )
+                for i, path in enumerate(paths[start:], start)
+            )
+            self.report_paths = paths
+            changed = True
+        if changed or self.selected is None:
             self.redraw()
-        if self.tab == "record" and self.selected:
-            await self.refresh_record()
+        if self.details_visible:
+            await self.details.refresh_file()
 
     def legend(self) -> Text:
         legend = Text()
-        for status, color in zip(STATUS, COLORS, strict=True):
+        present = {item.status for item in self.items or ()}
+        for status, (label, color) in STATUS_STYLES.items():
+            if status not in present:
+                continue
             if legend:
                 legend.append("  ")
             hidden = status == self.hidden_status
             click = {"@click": f"app.filter('{status}')"}
-            legend.append("██", Style(color=color, bgcolor=color, meta=click))
-            legend.append(" " + self.tr(STATUS_LABELS[status]), Style(color=color, dim=hidden, strike=hidden, meta=click))
+            legend.append("○" if hidden else "●", Style(color=color, meta=click))
+            legend.append(
+                " " + self.tr(label), Style(dim=hidden, strike=hidden, meta=click)
+            )
         return legend
 
-    def action_filter(self, status: str | None = None) -> None:
+    async def action_filter(self, status: str | None = None) -> None:
         self.last_filter = status or self.last_filter
-        self.hidden_status = None if self.hidden_status == self.last_filter else self.last_filter
-        self.query_one("#legend", Static).update(self.legend())
+        self.hidden_status = (
+            None if self.hidden_status == self.last_filter else self.last_filter
+        )
         self.redraw()
+        await self.details.refresh_file()
 
-    def redraw(self) -> None:
-        hidden = {i.exploration_id for i in self.items if i.status == self.hidden_status}
+    def redraw(self, selection: ExplorationItem | Path | None = None) -> None:
+        """Keep the selected node by ID or published path across filters, updates and translation."""
+        hidden = {
+            i.exploration_id for i in self.items if i.status == self.hidden_status
+        }
         visible = [i for i in self.items if i.exploration_id not in hidden]
-        old_id = self.selected.exploration_id if self.selected else None
-        self.selected = next((i for i in visible if i.exploration_id == old_id), next(iter(visible), None))
-        selected_id = self.selected.exploration_id if self.selected else None
+        if selection is None:
+            selection = self.selected
+        if not isinstance(selection, Path) or selection not in self.report_paths:
+            old_id = (
+                selection.exploration_id
+                if isinstance(selection, ExplorationItem)
+                else None
+            )
+            selection = next((i for i in visible if i.exploration_id == old_id), None)
+            if selection is None:
+                selection = (
+                    visible[0] if visible else next(iter(self.report_paths), None)
+                )
+        if selection != self.selected:
+            self.details.file = None
+            self.details.read_error = ""
+        self.selected = selection
+        selected_id = (
+            selection.exploration_id if isinstance(selection, ExplorationItem) else None
+        )
         self.graph.show_items(self.items, selected_id, hidden)
         self.graph.display = bool(visible)
         self.query_one("#empty").display = not visible
-        self.render_details()
+        self.query_one("#lineage").display = bool(self.items) or not self.report_paths
+        self.query_one("#explorations-title").display = bool(self.report_paths)
+        self.query_one("#report-history").display = bool(self.report_paths)
+        with self.report_chain.prevent(OptionList.OptionHighlighted):
+            self.report_chain.highlighted = (
+                self.report_paths.index(selection)
+                if isinstance(selection, Path)
+                else None
+            )
+        legend = self.query_one("#legend", Static)
+        legend.display = bool(self.items)
+        legend.update(self.legend())
+        self.apply_split()
+        self.details.show_selection()
 
-    async def on_exploration_graph_selected(self, event: ExplorationGraph.Selected) -> None:
-        self.selected = event.item
-        self.record = ""
-        self.redraw()
-        self.query_one("#detail-scroll", VerticalScroll).scroll_home(animate=False)
-        if self.tab == "record":
-            await self.refresh_record()
+    async def on_exploration_graph_selected(
+        self, event: ExplorationGraph.Selected
+    ) -> None:
+        """Open the selected exploration in the shared detail pane."""
+        await self.select_node(event.item)
 
-    def on_exploration_graph_inspect(self) -> None:
+    @on(OptionList.OptionHighlighted, "#report-chain")
+    @on(OptionList.OptionSelected, "#report-chain")
+    async def select_report(self, event: OptionList.OptionMessage) -> None:
+        """Show a report on click, Enter or keyboard cursor movement."""
+        if (
+            event.option_id is not None
+            and (path := Path(event.option_id)) in self.report_paths
+        ):
+            await self.select_node(path)
+
+    @on(events.DescendantFocus, "#report-chain")
+    def focus_report_chain(self) -> None:
+        """Let keyboard users enter the report chain at its first node."""
+        if self.report_chain.highlighted is None:
+            self.report_chain.action_first()
+
+    async def select_node(self, selection: ExplorationItem | Path) -> None:
+        """Reveal and read a user's choice without allowing a background refresh to move their cursor."""
+        changed = selection != self.selected
+        if changed:
+            self.redraw(selection)
+            self.query_one("#detail-scroll", VerticalScroll).scroll_home(animate=False)
         if not self.details_visible:
-            self.action_toggle_details()
+            await self.action_toggle_details()
+        elif changed:
+            await self.details.refresh_file()
+
+    async def on_exploration_graph_inspect(self) -> None:
+        """Enter the exploration tabs, including when arriving from the report chain by keyboard."""
+        if not isinstance(self.selected, ExplorationItem):
+            if not self.graph.node_regions:
+                return
+            await self.select_node(next(iter(self.graph.node_regions.values())))
+        if not self.details_visible:
+            await self.action_toggle_details()
         self.query_one("#detail-tabs", Tabs).focus()
-
-    async def on_tabs_tab_activated(self, event: Tabs.TabActivated) -> None:
-        self.tab = event.tab.id
-        self.query_one("#detail-scroll", VerticalScroll).scroll_home(animate=False)
-        self.render_details()
-        if self.tab == "record" and self.selected:
-            await self.refresh_record()
-
-    def record_path(self, item: ExplorationItem) -> Path:
-        folder = quote(item.exploration_id, safe="").replace(".", "%2E")
-        return self.pool.directory / folder / item.record_path
-
-    async def refresh_record(self) -> None:
-        item = self.selected
-        text = await asyncio.to_thread(self.record_path(item).read_text, encoding="utf-8")
-        if self.selected == item and self.tab == "record":
-            self.record = text
-            self.render_details()
-
-    def render_details(self) -> None:
-        item = self.selected
-        self.query_one("#detail-name", Static).update(f"#{item.exploration_id}  {item.name}" if item else "")
-        parents = self.tr("父节点") + " " + ", ".join("#" + p for p in item.parent_exploration_ids) if item and item.parent_exploration_ids else ""
-        parent_label = self.query_one("#detail-parents", Static)
-        parent_label.update(parents)
-        parent_label.tooltip = parents or None
-        body = self.query_one("#body", Static)
-        if item is None:
-            body.update("")
-            return
-        content = Text()
-        if self.tab == "experiment":
-            report = Table(expand=True, border_style="#536367", header_style="bold cyan")
-            report.add_column(self.tr("实验结果"))
-            report.add_column(self.tr("任务版本"), width=13 if self.language == "en" else 10)
-            report.add_row(Text(item.experiment_result or self.tr("暂无实验结果")), f"v{item.task_revision_number}")
-            commands = Text("\n".join("$ " + c for c in item.experiment_commands), style="#a6e5ad")
-            body.update(Group(Text(item.description), report, commands))
-            return
-        if self.tab == "record":
-            content.append(str(self.record_path(item).relative_to(self.workspace)), "cyan")
-            content.append("\n\n" + (self.record.strip() or self.tr("暂无探索记录")))
-        else:
-            content.append(item.description)
-            content.append(f"\n\n{self.tr('任务版本')}  v{item.task_revision_number}", "cyan")
-        body.update(content)
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if self.embedded and action in {"quit", "help_quit"}:

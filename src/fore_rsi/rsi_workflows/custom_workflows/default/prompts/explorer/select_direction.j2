@@ -1,0 +1,21 @@
+{#
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
+#}
+
+Propose one new exploration item for the task in `{{ task_file }}`.
+{% if exploration_item is defined %}
+Continue from item {{ exploration_item.exploration_id }} ({{ exploration_item.name }}, `{{ exploration_item.status }}`). Its recorded checkout is `{{ exploration_item.code_workspace_path }}`. Read the analysis in `{{ exploration_record_path }}`, explain what to try next, and include `{{ exploration_item.exploration_id }}` as a direct parent.
+{% else %}
+Choose the direction and its parents from the latest pool. Consider compatible improvements from other groups, or start from the baseline when it fits better.
+{% endif %}
+Avoid duplicating active work. Read the records of any other parents before proposing a combination.
+{% if feedback %}
+The Checker rejected the previous proposal: {{ feedback }}
+Address the objection in the new proposal.
+{% endif %}
+Choose the child's writable checkout before submitting the proposal:
+- Starting from the baseline or a `mature` item: keep that directory unchanged. Choose an unused directory under `{{ code_directory }}` for an independent copy of the parent code.
+- Continuing from a measured, unpublished (`retired`) direct parent: prefer its existing path if it still owns the checkout. Only one child can take it over. For a separate branch, use a new directory and start from the parent version recorded for that experiment.
+
+Call `{{ tool }}` with the proposed change, how to evaluate it, the direct parent IDs and the absolute checkout path. Write the proposal and parent versions in the returned `exploration_record_path`. Wait for Checker approval before copying or editing files.

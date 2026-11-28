@@ -4,11 +4,11 @@
 """Control the Codex app-server shared by one member's TUI and workflow."""
 
 import asyncio
+import json
+import os
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager, suppress
 from hashlib import sha256
-import json
-import os
 from pathlib import Path
 from secrets import token_urlsafe
 from typing import Any, Literal
@@ -72,18 +72,40 @@ class CodexAppServer:
         })
         await self.connection.send(json.dumps({"method": "initialized", "params": {}}))
 
-    async def attach_member(self, thread_id: str | None, member_name: str) -> None:
-        """Subscribe to the TUI's root thread, including a member that has not received its first prompt."""
+    async def fork_member(
+        self, seed_thread_id: str, *, model: str | None, effort: str | None,
+    ) -> str:
+        """Materialize the child thread in the shared rollout store without starting a turn."""
+        seed = (await self.request("thread/read", {"threadId": seed_thread_id}))["thread"]
+        if seed.get("historyMode") == "paginated" and seed["path"] is not None:
+            # Codex materializes a compressed source in place when creating a paginated
+            # history reference. Do not let a fork rewrite the seed's rollout storage.
+            plain = Path(seed["path"].removesuffix(".zst"))
+            if not plain.is_file() and plain.with_suffix(".jsonl.zst").is_file():
+                raise CodexAppServerError(f"Cannot fork compressed Codex seed {seed_thread_id} without modifying it.")
+        result = await self.request("thread/fork", {
+            "threadId": seed_thread_id,
+            "cwd": str(Path.cwd()),
+            "model": model,
+            "config": {"model_reasoning_effort": effort} if effort is not None else None,
+            "excludeTurns": True,
+        })
+        return result["thread"]["id"]
+
+    async def attach_member(self, member_name: str) -> str:
+        """Subscribe to the selected thread, or bind the only fresh thread on this member's server."""
+        thread_id = self.thread_id
         if thread_id is None:
-            # A fresh TUI owns a loaded thread but has no persisted rollout. Its
-            # dedicated server has exactly one thread at startup: the visible root.
+            # The shared rollout store contains other members, but the fresh server
+            # has exactly one loaded thread: the TUI's new root.
             loaded = await self.request("thread/loaded/list", {})
             if len(loaded["data"]) != 1:
                 raise CodexAppServerError(f"Expected one new Codex thread for {member_name}.")
             thread_id = loaded["data"][0]
-            await self.request("thread/name/set", {"threadId": thread_id, "name": member_name})
         await self.request("thread/resume", {"threadId": thread_id, "excludeTurns": True})
+        await self.request("thread/name/set", {"threadId": thread_id, "name": member_name})
         self.thread_id = thread_id
+        return thread_id
 
     @asynccontextmanager
     async def register_input(self) -> AsyncIterator[str]:

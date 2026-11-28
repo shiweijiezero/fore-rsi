@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
 
-"""Read Pi's JSONL record file without opening a member pane."""
+"""Read the native Pi session settings for a stopped member."""
 
 import json
 from pathlib import Path

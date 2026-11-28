@@ -37,7 +37,7 @@ fore-rsi --help
 fore-rsi --version
 ```
 
-实际执行受改动影响的命令路径，记录所用命令与真实结果。可用参数见 [CLI 参考](docs/cli.md)。
+实际执行受改动影响的命令路径，记录所用命令与真实结果。可用参数见 [CLI 参考](docs/cli_zh.md)。
 
 ## 构建发行包
 

@@ -1,0 +1,24 @@
+{#
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: Copyright contributors to the ForeRSI project
+#}
+
+Measure item {{ exploration_item.exploration_id }} ({{ exploration_item.name }}).
+
+Task: `{{ task_file }}`
+Checkout: `{{ exploration_item.code_workspace_path }}`
+Exploration record: `{{ exploration_record_path }}`
+Current resource grant: {{ resource_grant }}
+Team allocations: {{ allocations | tojson }}
+
+Approved commands, in execution order:
+{% for command in exploration_item.experiment_commands %}
+```sh
+{{ command }}
+```
+{% endfor %}
+Read the current task and the experiment plan in the record. Confirm the checkout revision, workload, target and available resources match the approved run. Use only units you hold, within the task's shared limits. Check the actual device mapping before launch. If you need more, ask the current owner with `send_team_message` and `request_reply=true`; check `read_team_messages` for the reply. After the owner verifies its jobs no longer use the units and releases them, claim your new full set with `set_experiment_resources`. A message alone is not a grant. If you cannot get a suitable allocation, report the blocker rather than changing the approved comparison.
+
+Use your native execution tools to run the approved commands from the assigned checkout. Keep the source and configuration unchanged. When submitting a job or service, record its run-specific name and location before launch so it can be found if the submission response is lost. Check that an existing job belongs to this run before using its logs. Keep the evidence at the task's artifact location or in `artifacts/` beside the exploration record. Record which commands completed and which measurements actually produced data; an overall exit code alone does not establish every result.
+
+Before submitting the report, finish or stop work started solely for this run, preserve its artifacts, and verify that the allocation can be reused. Leave other work and shared services intact. If cleanup cannot be confirmed, name what remains and where to check it. Call `{{ tool }}` with the detailed report, cleanup status and one short `experiment_summary` for the node, such as “throughput +20%”, “3/3 passed” or “no data”. For a percentage change, include both measured values and their comparison conditions in the report.

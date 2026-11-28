@@ -18,8 +18,8 @@ from .agents.coordinator import CoordinatorAgent
 from .agents.experimenter import ExperimenterAgent
 from .agents.explorer import ExplorerAgent
 from .agents.watchdog import WatchdogAgent
-from .subflows.experiment_subflow import run_experiment_subflow
-from .subflows.exploration_subflow import run_exploration_subflow
+from .subflows.experiment_subflow import ExperimentSubflow
+from .subflows.exploration_subflow import ExplorationSubflow
 from .subflows.watchdog_subflow import run_watchdog_subflow
 
 
@@ -28,35 +28,33 @@ class DefaultWorkflow(BaseWorkflow):
 
     workflow_name = "default"
 
+    exploration_roles = (ExplorerAgent, CheckerAgent)
     agent_roles: ClassVar[dict[str, type[BaseAgent]]] = {
-        role.role_name: role
-        for role in (
-            CoordinatorAgent,
-            ExplorerAgent,
-            CheckerAgent,
-            ExperimenterAgent,
-            WatchdogAgent,
-        )
+        role.role_name: role for role in (CoordinatorAgent, *exploration_roles, ExperimenterAgent, WatchdogAgent)
     }
 
     def __init__(self, config: WorkflowConfig, session_directory: Path) -> None:
         """Prepare the session's task history without starting any agents."""
         super().__init__(config, session_directory)
         self.task = Task(session_directory)
-        self.watchdog_task: asyncio.Task[None] | None = None
+        self.exploration: ExplorationSubflow
+        self.experiments: ExperimentSubflow
 
     async def run_workflow(self, workspace_id: str) -> None:
         """Start the team on the first submission and deliver later revisions while it runs.
 
-        START --> create_agent[Coordinator] --> receive_task
+        START --> create Coordinator --> receive_task
 
-        receive_task
-              +--[exceed_limit_try] ---------> raise RuntimeError
-              +--[first accepted submission]--+--> init_subflows
-                                              +--> receive_task_updates
+        [first task accepted] --> start concurrent subflows
+            +-- exploration --> review directions and candidates --> submit approved experiments
+            +-- experiments --> publish report on the item --> original group resumes analysis
+            +-- task updates --> notify members of the latest revision
+            +-- watchdog --> review progress when enabled
 
-        [exploration and experiments finished] --> return
+        [all exploration groups finished] --> stop experiment dispatch and watchdog --> END
         """
+        self.exploration = ExplorationSubflow(self, workspace_id)
+        self.experiments = ExperimentSubflow(self, workspace_id)
         coordinator = await self.agent_scheduler.create_agent(
             agent_class=CoordinatorAgent,
             workgroup=self.workgroups.global_workgroup,
@@ -70,10 +68,14 @@ class DefaultWorkflow(BaseWorkflow):
             is_entry_agent=True,
         )
         await self.receive_task(coordinator, task_file=self.config.task)
-        exploration, experiments = self.init_subflows(workspace_id)
         self.subflow_tasks.create_task(self.receive_task_updates())
-        await exploration
-        await experiments
+        experiment_dispatch = self.subflow_tasks.create_task(self.experiments.run())
+        watchdog = self.subflow_tasks.create_task(run_watchdog_subflow(self, workspace_id))
+        try:
+            await self.exploration.run()  # Includes all measurements requested by the exploration groups.
+        finally:
+            experiment_dispatch.cancel()
+            watchdog.cancel()
 
     async def receive_task(
         self,
@@ -83,75 +85,65 @@ class DefaultWorkflow(BaseWorkflow):
     ) -> None:
         """Wait for the first submission, asking the Coordinator to parse the task file if supplied.
 
-        receive_task
-              +--[task_file] --> parse_task --> wait_for_settle --> tool_submission_status
-              +--[no_file] ----> wait_for_task_revision
-
-        tool_submission_status
-              +--[submitted] --------> wait_for_task_revision
-              +--[not_submitted] ----> parse_task
-              +--[exceed_limit_try] -> raise RuntimeError
+        [task file] --> parse_task --> request_submission
+            +-- submitted --> wait_for_task_revision
+            +-- attempts exhausted --> raise RuntimeError
+        [no file] --> wait_for_task_revision
 
         wait_for_task_revision --> return on first submission
         """
-        if task_file is not None:
-            status = "not_submitted"
-            while status == "not_submitted":
-                await coordinator.parse_task(task_file)
-                await coordinator.wait_for_settle()
-                status = coordinator.tool_submission_status(max_attempts=self.config.max_attempts)
-            if status == "exceed_limit_try":
-                raise RuntimeError(
-                    f"{coordinator.agent_name} did not submit {task_file} "
-                    f"after {self.config.max_attempts} attempts."
-                )
+        if task_file is not None and not await coordinator.parse_task(task_file):
+            raise RuntimeError(
+                f"{coordinator.agent_name} did not submit {task_file} after {self.config.max_attempts} attempts."
+            )
 
         await self.task_revision_queue.get()
 
-    def init_subflows(self, workspace_id: str) -> tuple[asyncio.Task[None], asyncio.Task[None]]:
-        """Start the team and return the two tasks whose completion ends the workflow.
-
-        init_subflows
-              +--> run_exploration_subflow
-              +--> run_experiment_subflow
-              +--> run_watchdog_subflow
-        """
-        tasks = self.subflow_tasks
-        exploration = tasks.create_task(run_exploration_subflow(self, workspace_id))
-        experiments = tasks.create_task(run_experiment_subflow(self, workspace_id))
-        self.watchdog_task = tasks.create_task(run_watchdog_subflow(self, workspace_id))
-        return exploration, experiments
-
     async def receive_task_updates(self) -> None:
-        """Notify agents on each accepted submission until the revision queue closes and drains.
+        """Relay the latest revision without interrupting a turn for an allocation-only change.
 
-        task_revision_queue.get
-              +--[accepted] --> update_task_to_agents --> task_revision_queue.get
-              +--[queue closed and empty] --> return
+        wait for submission
+            +-- same revision ------> wait again
+            +-- only team or measurement allocation changed --> queue notice for next turn
+            +-- requirements changed --> steer running members; notify others
+            +-- queue drained and closed --> END
         """
+        previous = self.task.task_revisions[0]
         while True:
             try:
-                task_revision = await self.task_revision_queue.get()
+                await self.task_revision_queue.get()
             except asyncio.QueueShutDown:
                 return
-            await self.update_task_to_agents(task_revision)
+            current = self.task.current_task
+            assert current is not None
+            if current is previous:
+                continue
+            # The experiment team applies new model slots and measurement resources after its runs drain.
+            # Steering those native turns here would interrupt the work it is waiting to finish.
+            allocation = {
+                "agent_team": {"roles", "watchdog_interval_seconds"},
+                "constraints": {"resources": {"experiment_resources"}},
+            }
+            changed_requirements = (current.task_submission.model_dump(exclude=allocation)
+                                    != previous.task_submission.model_dump(exclude=allocation))
+            await self.update_task_to_agents(current, steer=changed_requirements)
+            previous = current
 
-    async def update_task_to_agents(self, task_revision: TaskRevision) -> None:
-        """Steer running agents to the task revision and leave it in the inboxes of other live members."""
+    async def update_task_to_agents(self, task_revision: TaskRevision, *, steer: bool) -> None:
+        """Deliver requirements to live members; quota-only updates wait for their next prompt."""
         message = (
             f"Task revision {task_revision.revision_number} is available. "
             f"Read {task_revision.revision_file_path.resolve()} for the current requirements."
         )
-        # Sending to a running agent yields control; take the recipient list before membership can change.
-        members = [agent for workgroup in self.workgroups.values() for agent in workgroup.agents.values()]
-        for agent in members:
-            if agent.state == AgentState.RUNNING:
-                await agent.send_message(message, mode="steer")
+        # Retained seeds still own their panes but do not take work or task revisions.
+        for agent in tuple(self.agent_scheduler.active_agents):
+            if agent not in self.agent_scheduler.active_agents:
+                continue  # An earlier delivery may have yielded while this member left its slot.
+            if steer and agent.state == AgentState.RUNNING:
+                update = message
+                if isinstance(agent, ExperimenterAgent):
+                    update += (" Do not restart a measurement already issued. If its authorization or limits "
+                               "changed, stop the affected work and report the actual outcome and cleanup status.")
+                await agent.send_message(update, mode="steer")
             elif agent.state not in (AgentState.RETIRED, AgentState.FAILED):
                 agent.add_to_inbox(message)
-
-    async def close_workflow(self) -> None:
-        """Stop the watchdog and reject further task submissions when the workflow exits."""
-        if self.watchdog_task is not None:
-            self.watchdog_task.cancel()
-        await super().close_workflow()

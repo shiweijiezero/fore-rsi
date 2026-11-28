@@ -45,6 +45,7 @@ namespaces = false
 
 [tool.setuptools.package-data]
 "*" = ["prompts/**/*.j2"]
+"fore_rsi.rsi_workflows.agent_runtimes.pi" = ["ipc.ts", "tool_mcp.ts"]
 "fore_rsi.rsi_workflows.agent_runtimes.claude_code" = [
     "turn_events/.claude-plugin/plugin.json",
     "turn_events/hooks/hooks.json",

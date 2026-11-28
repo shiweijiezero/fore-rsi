@@ -13,11 +13,6 @@ type MessageRequest = {
   mode: MessageDeliveryMode;
 };
 
-type SettledWaiter = {
-  after: number;
-  resolve: (sequence: number) => void;
-};
-
 async function readMessageRequest(request: IncomingMessage): Promise<MessageRequest> {
   const chunks: Buffer[] = [];
   for await (const chunk of request) {
@@ -51,18 +46,21 @@ export default function serveIpc(pi: ExtensionAPI): void {
   let server: Server | undefined;
   let socketPath: string | undefined;
   let settledSequence = 0;
-  let settledWaiters: SettledWaiter[] = [];
+  let aborted = false;
+  const settledWaiters = new Set<ServerResponse>();
 
-  function waitForSettled(after: number): Promise<number> {
-    if (settledSequence > after) return Promise.resolve(settledSequence);
-    return new Promise(resolve => settledWaiters.push({ after, resolve }));
+  // Headers acknowledge a running turn. The body arrives only when Pi settles, which can
+  // take arbitrarily long for experiments or while a user is answering a native prompt.
+  function acknowledgeStart(response: ServerResponse): void {
+    if (!response.headersSent) {
+      response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      response.flushHeaders();
+    }
   }
 
-  function markSettled(): void {
-    settledSequence += 1;
-    const ready = settledWaiters.filter(waiter => settledSequence > waiter.after);
-    settledWaiters = settledWaiters.filter(waiter => settledSequence <= waiter.after);
-    for (const waiter of ready) waiter.resolve(settledSequence);
+  function finishWait(response: ServerResponse): void {
+    acknowledgeStart(response);
+    response.end(JSON.stringify({ settled_seq: settledSequence, aborted }));
   }
 
   function snapshot(ctx: ExtensionContext) {
@@ -74,8 +72,14 @@ export default function serveIpc(pi: ExtensionAPI): void {
     };
   }
 
-  pi.on("agent_settled", () => {
-    markSettled();
+  pi.on("agent_start", () => {
+    for (const response of settledWaiters) acknowledgeStart(response);
+  });
+  pi.on("agent_settled", event => {
+    settledSequence++;
+    aborted = event.aborted;
+    for (const response of settledWaiters) finishWait(response);
+    settledWaiters.clear();
   });
 
   pi.on("session_start", async (_event, ctx) => {
@@ -107,11 +111,17 @@ export default function serveIpc(pi: ExtensionAPI): void {
         (request.url === "/settled" || request.url?.startsWith("/settled?"))
       ) {
         try {
-          const after = Number(new URL(request.url, "http://pi").searchParams.get("after"));
-          if (!Number.isSafeInteger(after) || after < 0) {
-            throw new Error("settled wait requires a non-negative sequence");
+          const after = Number(new URL(request.url, "http://pi").searchParams.get("after") ?? NaN);
+          if (!Number.isSafeInteger(after) || after < 0 || after > settledSequence) {
+            throw new Error("Invalid settle sequence for this session.");
           }
-          sendJson(response, 200, { settled_seq: await waitForSettled(after) });
+          if (settledSequence > after) {
+            finishWait(response);
+          } else {
+            settledWaiters.add(response);
+            response.once("close", () => settledWaiters.delete(response));
+            if (!ctx.isIdle()) acknowledgeStart(response);
+          }
         } catch (error) {
           sendJson(response, 400, { error: String(error) });
         }
@@ -120,10 +130,9 @@ export default function serveIpc(pi: ExtensionAPI): void {
       if (request.method === "POST" && request.url === "/message") {
         try {
           const { message, mode } = await readMessageRequest(request);
-          await Promise.resolve(pi.sendUserMessage(message, {
-            deliverAs: mode === "queue" ? "followUp" : "steer",
-          }));
-          sendJson(response, 202, { accepted: true });
+          const after = settledSequence;
+          pi.sendUserMessage(message, { deliverAs: mode === "queue" ? "followUp" : "steer" });
+          sendJson(response, 202, { after });
         } catch (error) {
           sendJson(response, 400, { error: String(error) });
         }
@@ -148,7 +157,8 @@ export default function serveIpc(pi: ExtensionAPI): void {
   });
 
   pi.on("session_shutdown", () => {
-    settledWaiters = [];
+    for (const response of settledWaiters) response.destroy();
+    settledWaiters.clear();
     if (!server) return;
     server.close();
     server = undefined;

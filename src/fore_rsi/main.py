@@ -4,6 +4,7 @@
 """ForeRSI application startup shared by installed and module entry points."""
 
 import asyncio
+import sys
 from collections.abc import Sequence
 from typing import cast
 
@@ -45,6 +46,11 @@ async def main(args: Sequence[str] | None = None) -> None:
             await delete_session(cast(str, config.session), config.cache_dir)
             return
 
+    interactive = sys.stdin.isatty() and sys.stdout.isatty()
+    if not interactive and config.workflow.task is None:
+        print("fore-rsi: run without a terminal requires --task FILE.", file=sys.stderr)
+        raise SystemExit(2)
+
     # Only a workflow host needs agent SDKs and custom workflow discovery.
     from fore_rsi.rsi_workflows.agent_runtimes import get_agent_runtime_class
     from fore_rsi.rsi_workflows.launch_workflow import create_workflow_runner
@@ -60,13 +66,16 @@ async def main(args: Sequence[str] | None = None) -> None:
     await ui_runner.start_server()
     bind_session_storage(config.session, config.cache_dir)
     workspace_id = await ui_runner.prepare()
-    # The foreground conversation can still call tools after workflow startup returns.
-    try:
-        async with workflow_runner.workflow.tool_mcp_host.serve(), asyncio.TaskGroup() as tasks:
-            tasks.create_task(workflow_runner.run(workspace_id), name="workflow")
-            await ui_runner.run()
-            # TaskGroup owns cancellation so later shutdown signals cannot
-            # interrupt a workflow's cleanup with another cancellation.
-            raise InterfaceClosed()
-    except* InterfaceClosed:
-        pass
+    async with workflow_runner.workflow.tool_mcp_host.serve():
+        if not interactive:
+            # Agent panes have their own PTYs. A batch caller waits for the workflow, not a UI attachment.
+            await workflow_runner.run(workspace_id)
+            print(f"completed session {config.session}: {workflow_runner.workflow.session_directory}")
+            return
+        try:
+            async with asyncio.TaskGroup() as tasks:
+                tasks.create_task(workflow_runner.run(workspace_id), name="workflow")
+                await ui_runner.run()
+                raise InterfaceClosed()  # Closing the foreground client cancels any remaining workflow work.
+        except* InterfaceClosed:
+            pass

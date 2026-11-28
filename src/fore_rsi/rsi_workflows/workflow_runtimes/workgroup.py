@@ -8,22 +8,30 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import AsyncExitStack
-from dataclasses import replace
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from fore_rsi.rsi_workflows.base_agent import BaseAgent
     from fore_rsi.rsi_workflows.base_workflow import BaseWorkflow
-    from fore_rsi.rsi_workflows.workflow_runtimes.task import TaskRevision
 
 
 class Workgroup:
     """Own the agent instances belonging to one workgroup."""
 
-    def __init__(self, workgroup_name: str) -> None:
-        """Initialize an empty workgroup."""
+    def __init__(self, workgroup_name: str, *, fork_source: BaseAgent | None = None, is_fork_seed: bool = False) -> None:
+        """Register the group's identity, fork source and whether it prepares a seed rather than taking work."""
         self.workgroup_name = workgroup_name
+        self.fork_source = fork_source
+        self.is_fork_seed = is_fork_seed
         self.agents: dict[str, BaseAgent] = {}
+        self.retired_records: dict[str, tuple[Path, ...]] = {}
+
+    def member[AgentT: BaseAgent](self, role: type[AgentT]) -> AgentT:
+        """Return the single active member of a role in a group with one member per role."""
+        member, = (agent for agent in self.agents.values() if isinstance(agent, role))
+        return member
 
     async def start_members(
         self,
@@ -31,26 +39,20 @@ class Workgroup:
         agents: Sequence[type[BaseAgent]],
         *,
         workspace_id: str,
-        task_revision: TaskRevision | None,
     ) -> None:
-        """Start members concurrently using each role's first allocation or the workflow defaults.
+        """Start members concurrently as the scheduler admits each role to a model allocation.
 
         If startup fails, retire only members from this batch, leaving other members in place.
         """
-        roles = task_revision.task_submission.agent_team.roles if task_revision is not None else {}
         starts: list[asyncio.Task[BaseAgent]] = []
         try:
             async with asyncio.TaskGroup() as startup:
                 for role in agents:
-                    config = workflow.default_agent_config
-                    if allocations := roles.get(role.role_name):
-                        first = allocations[0]
-                        config = replace(config, model=first.model, effort=first.effort)
                     task = startup.create_task(
                         workflow.agent_scheduler.create_agent(
                             agent_class=role,
                             workgroup=self,
-                            agent_config=config,
+                            fork_source=self.fork_source.agent_runtime if isinstance(self.fork_source, role) else None,
                             workflow=workflow,
                             workspace_id=workspace_id,
                             is_entry_agent=False,
@@ -76,6 +78,7 @@ class Workgroup:
     async def discard_member(self, agent: BaseAgent) -> None:
         """Remove a member from the workgroup only after it closes successfully."""
         await agent.close()
+        self.retired_records[agent.get_full_name()] = agent.agent_runtime.conversation_files()
         self.agents.pop(agent.agent_name, None)
 
 
@@ -104,9 +107,10 @@ class Workgroups(Mapping[str, Workgroup]):
         workspace_id: str,
         workgroup_name: str | None = None,
         agents: Sequence[type[BaseAgent]] = (),
-        task_revision: TaskRevision | None = None,
+        fork_source: BaseAgent | None = None,
+        is_fork_seed: bool = False,
     ) -> Workgroup:
-        """Register an empty workgroup or start its initial members before returning it."""
+        """Register a group with its seed and start any requested members before returning it."""
         if workgroup_name is None:
             while True:
                 self.workgroup_sequence += 1
@@ -116,13 +120,11 @@ class Workgroups(Mapping[str, Workgroup]):
         elif workgroup_name in self.workgroups_by_name:
             raise ValueError(f"Workgroup {workgroup_name!r} already exists in this workflow.")
 
-        workgroup = Workgroup(workgroup_name)
+        workgroup = Workgroup(workgroup_name, fork_source=fork_source, is_fork_seed=is_fork_seed)
         self.workgroups_by_name[workgroup_name] = workgroup
         if agents:
             try:
-                await workgroup.start_members(
-                    self.workflow, agents, workspace_id=workspace_id, task_revision=task_revision
-                )
+                await workgroup.start_members(self.workflow, agents, workspace_id=workspace_id)
             except BaseException:
                 # Keep the workgroup reachable for shutdown if a member failed to close.
                 if not workgroup.agents:

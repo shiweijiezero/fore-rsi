@@ -5,7 +5,6 @@
 
 from collections import defaultdict
 from graphlib import TopologicalSorter
-from typing import get_args
 
 from rich.text import Text
 from textual import events
@@ -19,26 +18,41 @@ from fore_rsi.rsi_workflows.workflow_runtimes.exploration_pool import (
     ExplorationItemStatus,
 )
 
-
-BOX_WIDTH = 18
+BOX_WIDTH = 24
 COLUMN_STEP = BOX_WIDTH + 6
-STATUS = get_args(ExplorationItemStatus)
-# Colors follow the order declared by ExplorationItemStatus.
-COLORS = ["#9ba6ac", "#efca61", "#81bde0", "#c79df2", "#f17b72", "#91d987"]
+STATUS_STYLES: dict[ExplorationItemStatus, tuple[str, str]] = {
+    "pending_confirmation": ("待确认", "default"),
+    "approved": ("已批准", "green"),
+    "rejected": ("已拒绝", "red"),
+    "exploring": ("探索中", "blue"),
+    "queued_for_experiment": ("实验排队中", "yellow"),
+    "experimenting": ("实验中", "blue"),
+    "retired": ("已终止", "default"),
+    "mature": ("已成熟", "green"),
+}
 
 
 def layout(items, hidden):
-    parents = {item.exploration_id: list(dict.fromkeys(item.parent_exploration_ids)) for item in items}
+    parents = {
+        item.exploration_id: list(dict.fromkeys(item.parent_exploration_ids))
+        for item in items
+    }
     if hidden:
         # Resolve hidden chains before placing the remaining nodes into columns.
         for key in TopologicalSorter(parents).static_order():
             if key in parents:
-                parents[key] = list(dict.fromkeys(
-                    ancestor
-                    for parent in parents[key]
-                    for ancestor in (parents[parent] if parent in hidden else [parent])
-                ))
-        parents = {key: sources for key, sources in parents.items() if key not in hidden}
+                parents[key] = list(
+                    dict.fromkeys(
+                        ancestor
+                        for parent in parents[key]
+                        for ancestor in (
+                            parents[parent] if parent in hidden else [parent]
+                        )
+                    )
+                )
+        parents = {
+            key: sources for key, sources in parents.items() if key not in hidden
+        }
     columns = defaultdict(list)
     depths = {}
     for key in TopologicalSorter(parents).static_order():
@@ -58,7 +72,11 @@ def layout(items, hidden):
                 previous = waypoint
             edges.append((previous, child))
 
-    heights = {key: max(4, len(parents.get(key, ())) + 2) for key in depths}
+    summarized_ids = {item.exploration_id for item in items if item.experiment_summary}
+    heights = {
+        key: max(5 if key in summarized_ids else 4, len(parents.get(key, ())) + 2)
+        for key in depths
+    }
     column_heights = {
         depth: sum(heights.get(key, 4) + 1 for key in column) - 1
         for depth, column in columns.items()
@@ -102,9 +120,9 @@ class ExplorationGraph(ScrollableContainer):
     ExplorationGraph > Static { width: auto; height: auto; }
     """
 
-    BINDINGS = [(key, f"move_node('{key}')", "") for key in ("left", "right", "up", "down")] + [
-        ("enter", "inspect", "查看详情")
-    ]
+    BINDINGS = [
+        (key, f"move_node('{key}')", "") for key in ("left", "right", "up", "down")
+    ] + [("enter", "inspect", "查看详情")]
 
     def action_inspect(self):
         self.post_message(self.Inspect())
@@ -112,14 +130,26 @@ class ExplorationGraph(ScrollableContainer):
     def action_move_node(self, direction):
         if not self.node_regions:
             return
-        current = next((r for r, item in self.node_regions.items() if item.exploration_id == self.selected), None)
+        current = next(
+            (
+                r
+                for r, item in self.node_regions.items()
+                if item.exploration_id == self.selected
+            ),
+            None,
+        )
         if current is None:
             target = next(iter(self.node_regions))
         else:
             choices = []
             for region in self.node_regions:
                 dx, dy = region.x - current.x, region.y - current.y
-                forward, side = {"right": (dx, dy), "left": (-dx, dy), "down": (dy, dx), "up": (-dy, dx)}[direction]
+                forward, side = {
+                    "right": (dx, dy),
+                    "left": (-dx, dy),
+                    "down": (dy, dx),
+                    "up": (-dy, dx),
+                }[direction]
                 if forward > 0:
                     choices.append((forward + abs(side), abs(side), region))
             if not choices:
@@ -131,7 +161,12 @@ class ExplorationGraph(ScrollableContainer):
     def compose(self):
         yield Static()
 
-    def show_items(self, items: list[ExplorationItem], selected: str | None = None, hidden=frozenset()) -> None:
+    def show_items(
+        self,
+        items: list[ExplorationItem],
+        selected: str | None = None,
+        hidden=frozenset(),
+    ) -> None:
         by_id = {item.exploration_id: item for item in items}
         self.selected = selected
         positions, edges, heights = layout(items, hidden)
@@ -151,7 +186,7 @@ class ExplorationGraph(ScrollableContainer):
         for source, target in edges:
             destination = target[1] if isinstance(target, tuple) else target
             item = by_id.get(destination)
-            color = COLORS[STATUS.index(item.status)] if item else "grey58"
+            color = STATUS_STYLES[item.status][1] if item else "default"
             x, y = positions[source]
             tx, ty = positions[target]
             start = x + (BOX_WIDTH if isinstance(source, str) else BOX_WIDTH // 2)
@@ -169,22 +204,35 @@ class ExplorationGraph(ScrollableContainer):
             item = by_id.get(key)
             if item:
                 self.node_regions[Region(x, y, BOX_WIDTH, heights[key])] = item
-            color = COLORS[STATUS.index(item.status)] if item else "grey58"
-            tl, tr, bl, br, horizontal, vertical = "╔╗╚╝═║" if key == selected else "╭╮╰╯─│"
+            color = STATUS_STYLES[item.status][1] if item else "default"
+            tl, tr, bl, br, horizontal, vertical = (
+                "╔╗╚╝═║" if key == selected else "╭╮╰╯─│"
+            )
             title = f"#{key} {item.name}" if item else f"#{key}"
-            subtitle = (item.experiment_result or "") if item else self.app.tr("外部引用")
-            lines = [(tl + horizontal * (BOX_WIDTH - 2) + tr, color)]
-            for label in [title, subtitle] + [""] * (heights[key] - 4):
+            subtitle = (
+                self.app.tr(STATUS_STYLES[item.status][0])
+                if item
+                else self.app.tr("外部引用")
+            )
+            labels = [title, subtitle]
+            if item and item.experiment_summary:
+                labels.append(item.experiment_summary)
+            lines = [Text(tl + horizontal * (BOX_WIDTH - 2) + tr, style=color)]
+            for label in labels + [""] * (heights[key] - 2 - len(labels)):
                 content = Text(" ".join(label.split()))
                 content.truncate(BOX_WIDTH - 2, overflow="ellipsis")
                 content.align("center", BOX_WIDTH - 2)
-                lines.append((f"{vertical}{content.plain}{vertical}", color))
-            lines.append((bl + horizontal * (BOX_WIDTH - 2) + br, color))
+                lines.append(
+                    Text.assemble((vertical, color), content, (vertical, color))
+                )
+            lines.append(Text(bl + horizontal * (BOX_WIDTH - 2) + br, style=color))
             for offset, line in enumerate(lines):
                 boxes[x, y + offset] = line
 
         width = max((x + BOX_WIDTH for x, _ in positions.values()), default=0)
-        height = max((y + heights.get(key, 4) for key, (_, y) in positions.items()), default=0)
+        height = max(
+            (y + heights.get(key, 4) for key, (_, y) in positions.items()), default=0
+        )
         drawing = Text(no_wrap=True)
         for y in range(height):
             if y:
@@ -192,11 +240,13 @@ class ExplorationGraph(ScrollableContainer):
             x = 0
             while x < width:
                 if (x, y) in boxes:
-                    drawing.append(*boxes[x, y])
+                    drawing.append_text(boxes[x, y])
                     x += BOX_WIDTH
                 else:
                     dots, color = cells.get((x, y), (0, None))
-                    glyph = "▶" if (x, y) in arrows else chr(0x2800 + dots) if dots else " "
+                    glyph = (
+                        "▶" if (x, y) in arrows else chr(0x2800 + dots) if dots else " "
+                    )
                     drawing.append(glyph, style=arrows.get((x, y), color))
                     x += 1
         self.query_one(Static).update(drawing)
